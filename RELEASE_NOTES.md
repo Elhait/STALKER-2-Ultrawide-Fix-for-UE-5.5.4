@@ -3,7 +3,7 @@
 ## Included
 
 - `STALKER2GameplayAspectFix.asi`
-- Gameplay aspect correction for the Steam UE 5.5.6 build.
+- Gameplay aspect correction for the Steam UE 5.5.4 build.
 - Automatic replay of the verified camera transition at game startup, plus re-arming for the known gameplay-camera rebuild state.
 - Dynamic camera-writer resolution: the plugin scans `.text` for the complete verified camera-view copy path, then validates the target instruction as `MOVSS [RBX+0x30], XMM0` before the hook is installed.
 - Safe refusal when the signature is absent, ambiguous, or no longer validates. The plugin does not hook an unknown target.
