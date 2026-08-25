@@ -1,0 +1,7 @@
+*.asi
+*.obj
+*.pdb
+*.ilk
+x64/
+.vs/
+release-assets/
