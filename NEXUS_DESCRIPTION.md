@@ -1,4 +1,4 @@
-# STALKER 2 Gameplay Aspect Fix - Steam 2.0.2
+# STALKER 2 Gameplay Aspect Fix
 
 Fixes the broken ultrawide gameplay camera state introduced by the UE 5.5 update. The mod restores the same internal camera transition produced by the reliable manual workaround `16:9 -> Auto`, but does it automatically.
 
@@ -10,11 +10,12 @@ Created and maintained by [Elhait](https://github.com/Elhait).
 - Re-arms the fix when the exact gameplay-camera rebuild state is detected after a cutscene.
 - Does not force FOV 90 or override your in-game FOV setting.
 - Keeps constrained aspect-ratio behavior for a real 21:9 output.
-- Includes a build guard for the tested Steam 2.0.2 executable.
+- Resolves the verified camera writer by instruction signature rather than a fixed executable address.
+- Refuses to install a hook if that signature is absent, ambiguous, or fails instruction validation.
 
 ## Requirements
 
-- Steam version of S.T.A.L.K.E.R. 2: Heart of Chornobyl, build 2.0.2.
+- Steam version of S.T.A.L.K.E.R. 2: Heart of Chornobyl.
 - Ultimate ASI Loader installed as `dsound.dll`.
 
 ## Installation
@@ -32,7 +33,7 @@ I tested an integration of the [BigChenga Ultrawide / Flawless Widescreen soluti
 
 ## Compatibility
 
-Tested on Steam 2.0.2, UE 5.5.6, `5120x1440` (32:9), and `3440x1440` (custom 21:9). A later game update will make the plugin disable itself rather than apply a hook to an unknown executable.
+Tested on the Steam UE 5.5.6 build at `5120x1440` (32:9) and `3440x1440` (custom 21:9). A later game update will make the plugin disable itself rather than apply a hook to an unknown executable.
 
 ## Support
 

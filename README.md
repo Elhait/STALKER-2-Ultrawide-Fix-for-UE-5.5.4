@@ -1,6 +1,6 @@
 # STALKER 2 Gameplay Aspect Fix
 
-Source for the gameplay-only Steam 2.0.2 release. See [RELEASE_NOTES.md](RELEASE_NOTES.md) and [TESTING_AND_RESEARCH.md](TESTING_AND_RESEARCH.md) for scope, testing, and limitations.
+Source for the gameplay-only release. Version 0.1.1 resolves the verified gameplay camera writer from an instruction signature instead of a fixed executable address. See [RELEASE_NOTES.md](RELEASE_NOTES.md) and [TESTING_AND_RESEARCH.md](TESTING_AND_RESEARCH.md) for scope, testing, and limitations.
 
 ## Download
 

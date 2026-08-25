@@ -1,6 +1,6 @@
-# STALKER 2 Gameplay Aspect Fix 0.1.0
+# STALKER 2 Gameplay Aspect Fix 0.1.1
 
-First public gameplay-only release for Steam 2.0.2.
+Gameplay-only update with a dynamic camera-writer resolver.
 
 Maintained by [Elhait](https://github.com/Elhait).
 
@@ -10,10 +10,12 @@ Maintained by [Elhait](https://github.com/Elhait).
 - Automatically replays the known-good `16:9 -> Auto` camera transition.
 - Re-arms the fix when it detects the known post-cutscene gameplay-camera state.
 - Preserves the game's own FOV setting.
+- Finds the verified camera writer by instruction signature instead of relying on a fixed executable address.
+- Refuses to install if the signature is ambiguous or the decoded target no longer matches the expected camera write.
 
 ## Requirements
 
-- Steam build 2.0.2.
+- Steam version of S.T.A.L.K.E.R. 2: Heart of Chornobyl.
 - Ultimate ASI Loader installed as `dsound.dll`.
 
 ## Not Included

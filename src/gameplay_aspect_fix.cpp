@@ -15,9 +15,25 @@
 
 namespace
 {
-    constexpr std::uint32_t kExpectedTimeDateStamp = 0x60AB1AA8;
-    constexpr std::uint32_t kExpectedImageSize = 0x0B94D000;
-    constexpr std::uintptr_t kFovWriteRva = 0x00AF3A17;
+    // This sequence identifies the complete camera-view copy path, not merely a
+    // generic MOVSS instruction. The JNZ displacement may change between builds.
+    constexpr std::uint8_t kCameraWriterSignature[] = {
+        0xF6, 0x86, 0x62, 0x02, 0x00, 0x00, 0x10,
+        0xF3, 0x0F, 0x10, 0x86, 0x30, 0x02, 0x00, 0x00,
+        0x0F, 0x85, 0x00, 0x00, 0x00, 0x00,
+        0x48, 0x8D, 0x4B, 0x30,
+        0xF3, 0x0F, 0x11, 0x43, 0x30,
+        0xF3, 0x0F, 0x10, 0x86, 0x54, 0x02, 0x00, 0x00,
+        0xF3, 0x0F, 0x11, 0x43, 0x5C,
+        0x0F, 0xB6, 0x96, 0x59, 0x02, 0x00, 0x00,
+        0x8B, 0x43, 0x68, 0x83, 0xE2, 0x01, 0x83, 0xE0, 0xFE,
+        0x09, 0xD0, 0x89, 0x43, 0x68,
+        0x0F, 0xB6, 0x96, 0x59, 0x02, 0x00, 0x00,
+        0x83, 0xE2, 0x04, 0x83, 0xE0, 0xFB, 0x09, 0xD0, 0x89,
+        0x43, 0x68, 0x8A, 0x96, 0x63, 0x02, 0x00, 0x00, 0x88,
+        0x53, 0x6C,
+    };
+    constexpr std::size_t kFovWriteOffsetInSignature = 25;
     constexpr std::uintptr_t kAspectOffset = 0x254;
     constexpr std::uintptr_t kFlagsOffset = 0x259;
     constexpr float kWideAspect = 32.0f / 9.0f;
@@ -28,6 +44,7 @@ namespace
 
     HMODULE g_module{};
     HMODULE g_executable = GetModuleHandle(nullptr);
+    std::uint8_t* g_fovWriteAddress{};
     SafetyHookMid g_hook;
     std::shared_ptr<spdlog::logger> g_logger;
     std::atomic<ReplayState> g_state{ReplayState::WaitingForAutomaticUpdate};
@@ -153,19 +170,59 @@ namespace
         const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
         if (dos->e_magic != IMAGE_DOS_SIGNATURE) return false;
         const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(base + dos->e_lfanew);
-        if (nt->Signature != IMAGE_NT_SIGNATURE || nt->FileHeader.TimeDateStamp != kExpectedTimeDateStamp ||
-            nt->OptionalHeader.SizeOfImage != kExpectedImageSize) return false;
+        if (nt->Signature != IMAGE_NT_SIGNATURE) return false;
+
+        const auto* section = IMAGE_FIRST_SECTION(nt);
+        const std::uint8_t* textStart = nullptr;
+        std::size_t textSize = 0;
+        for (std::uint16_t i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++section) {
+            if (std::memcmp(section->Name, ".text", 5) == 0) {
+                textStart = base + section->VirtualAddress;
+                textSize = section->Misc.VirtualSize;
+                break;
+            }
+        }
+        if (!textStart || textSize < sizeof(kCameraWriterSignature)) return false;
+
+        std::uint8_t* match = nullptr;
+        std::size_t matches = 0;
+        for (std::size_t offset = 0; offset <= textSize - sizeof(kCameraWriterSignature); ++offset) {
+            const auto* candidate = textStart + offset;
+            bool matchesSignature = true;
+            for (std::size_t i = 0; i < sizeof(kCameraWriterSignature); ++i) {
+                // The 32-bit relative target of JNZ may move when surrounding code changes.
+                if ((i < 17 || i >= 21) && candidate[i] != kCameraWriterSignature[i]) {
+                    matchesSignature = false;
+                    break;
+                }
+            }
+            if (matchesSignature) {
+                match = const_cast<std::uint8_t*>(candidate);
+                ++matches;
+            }
+        }
+        if (matches != 1) {
+            Log("Camera-writer signature rejected: matches=", matches, ".");
+            return false;
+        }
 
         ZydisDecoder decoder{};
         ZydisDecodedInstruction instruction{};
-        ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT_VISIBLE]{};
-        auto* target = const_cast<std::uint8_t*>(base) + kFovWriteRva;
-        return ZYAN_SUCCESS(ZydisDecoderInit(&decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_STACK_WIDTH_64)) &&
+        // DecodeFull clears every possible operand slot, not just visible operands.
+        ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT]{};
+        auto* target = match + kFovWriteOffsetInSignature;
+        const bool verified = ZYAN_SUCCESS(ZydisDecoderInit(&decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_STACK_WIDTH_64)) &&
             ZYAN_SUCCESS(ZydisDecoderDecodeFull(&decoder, target, 15, &instruction, operands)) &&
             instruction.mnemonic == ZYDIS_MNEMONIC_MOVSS && instruction.operand_count_visible >= 2 &&
             operands[0].type == ZYDIS_OPERAND_TYPE_MEMORY && operands[1].type == ZYDIS_OPERAND_TYPE_REGISTER &&
             operands[0].mem.base == ZYDIS_REGISTER_RBX && operands[0].mem.disp.has_displacement &&
             operands[0].mem.disp.value == 0x30 && operands[1].reg.value == ZYDIS_REGISTER_XMM0;
+        if (verified) {
+            g_fovWriteAddress = target;
+            Log("Camera-writer signature validated at RVA=0x", std::hex,
+                reinterpret_cast<std::uintptr_t>(target) - reinterpret_cast<std::uintptr_t>(base), std::dec, ".");
+        }
+        return verified;
     }
 
     DWORD WINAPI Initialize(void*)
@@ -180,14 +237,20 @@ namespace
             g_logger->flush_on(spdlog::level::info);
         } catch (...) { return 0; }
 
-        Log("Gameplay aspect fix loaded. FOV is preserved from the game's settings.");
-        if (!VerifyExecutableAndInstruction()) {
-            Log("Test refused: executable or validated FOV instruction did not match.");
-            return 0;
+        try {
+            Log("Gameplay aspect fix loaded. FOV is preserved from the game's settings.");
+            if (!VerifyExecutableAndInstruction()) {
+                Log("Test refused: camera-writer signature or validated FOV instruction did not match.");
+                return 0;
+            }
+            Log("Installing validated gameplay hook.");
+            g_hook = safetyhook::create_mid(g_fovWriteAddress, ReplayManualTransition);
+            Log("Validated gameplay hook installed: ", static_cast<bool>(g_hook), ".");
+        } catch (const std::exception& exception) {
+            Log("Gameplay hook setup failed safely: ", exception.what());
+        } catch (...) {
+            Log("Gameplay hook setup failed safely with an unknown exception.");
         }
-        g_hook = safetyhook::create_mid(reinterpret_cast<std::uint8_t*>(g_executable) + kFovWriteRva,
-            ReplayManualTransition);
-        Log("Validated gameplay hook installed: ", static_cast<bool>(g_hook), ".");
         return 0;
     }
 }
