@@ -39,7 +39,8 @@ Copyright for this project is held by Elhait and released under MIT. Some helper
 
 If this mod helped you and you would like to support future updates or cutscene fixes:
 
-- [Ko-fi: elhait](https://ko-fi.com/elhait)
+- [Ko-fi](https://ko-fi.com/elhait)
 - PayPal: `entoni97l@gmail.com`
-- [Donatello]: (https://donatello.to/Elhait)
+- [Donatello](https://donatello.to/Elhait)
+
 Thank you for your support.
