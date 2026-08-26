@@ -1,4 +1,8 @@
-# STALKER 2 Gameplay Aspect Fix 0.1.1
+# GitHub Release Notes Template
+
+> This file is a reusable template based on the first release. It is not the current release text. Copy and update it when preparing future GitHub release notes.
+
+## STALKER 2 Gameplay Aspect Fix 0.1.1
 
 Gameplay-only update with a dynamic camera-writer resolver.
 

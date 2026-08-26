@@ -1,5 +1,4 @@
 *.asi
-*.obj
 *.pdb
 *.ilk
 x64/
