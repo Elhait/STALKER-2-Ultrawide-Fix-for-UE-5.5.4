@@ -2,30 +2,59 @@
 
 > This file is a reusable template based on the first release. It is not the current release text. Copy and update it when preparing future GitHub release notes.
 
-## STALKER 2 Gameplay Aspect Fix 0.1.1
+### STALKER2UltrawideFix v0.3.0
 
-Gameplay-only update with a dynamic camera-writer resolver.
+Unified gameplay and cinematic ultrawide fix for S.T.A.L.K.E.R. 2, validated on Steam build 2.0.4 with the UE 5.5.4 target.
 
-Maintained by [Elhait](https://github.com/Elhait).
+**Highlights**
 
-## Included
+- Gameplay correction for 21:9 and 32:9.
+- Automatic re-arm after camera rebuilds, including death/load.
+- Preserves the in-game gameplay FOV.
+- Cinematic aspect correction using the runtime camera aspect.
+- Hor+ cinematic FOV correction.
+- Custom cinematic framing: Auto, Native, 16:9, 21:9 and 32:9.
+- Automatic creation of STALKER2UltrawideFix.ini.
+- Guarded signature-based resolution with safe refusal on mismatch.
+- SHA-256 logging for the loaded ASI and game executable.
 
-- Fixes the incorrect 32:9 gameplay camera state.
-- Automatically replays the known-good `16:9 -> Auto` camera transition.
-- Re-arms the fix when it detects the known post-cutscene gameplay-camera state.
-- Preserves the game's own FOV setting.
-- Finds the verified camera writer by instruction signature instead of relying on a fixed executable address.
-- Refuses to install if the signature is ambiguous or the decoded target no longer matches the expected camera write.
+**Configuration**
 
-## Requirements
+```ini
+[Gameplay]
+Enabled=true
 
-- Steam version of S.T.A.L.K.E.R. 2: Heart of Chornobyl.
-- Ultimate ASI Loader installed as `dsound.dll`.
+[Cinematics]
+; Auto, Native, 16:9, 21:9, 32:9
+AspectRatio=Auto
 
-## Not Included
+FovCorrection=true
+```
 
-Cutscene letterbox and cutscene FOV changes are not included in this first release. Work on them is ongoing.
+**Installation**
 
-I tested integrating the [BigChenga Ultrawide / Flawless Widescreen solution](https://www.nexusmods.com/stalker2heartofchornobyl/mods/2337?tab=description), but bugs remain in the ASI integration. It is excluded until a stable solution is found.
+1. Install Ultimate ASI Loader.
+2. Place `dsound.dll` in `Stalker2\Binaries\Win64`.
+3. Remove the previous `STALKER2GameplayAspectFix.asi` and its old INI/log.
+4. Copy `STALKER2UltrawideFix.asi` and `STALKER2UltrawideFix.ini` into the same folder.
+5. Launch the game.
 
-See the bundled README for installation, compatibility, and troubleshooting.
+**Tested**
+
+- Steam build 2.0.4.
+- UE 5.5.4.
+- Gameplay at 21:9 and 32:9.
+- Camera rebuilds after death/load.
+- Cinematics at 21:9 and 32:9.
+- Forced 32:9 cinematic framing at 2560x1440.
+
+**Known issues**
+
+- A brief camera/projection jump may occur after a cinematic ends.
+- Weapon/viewmodel FOV may be incorrect on 21:9 after cinematics, loading or camera rebuilds until aiming down sights or opening a menu refreshes it.
+- Resolution changes during a session are not part of the validated scope; restart the game after changing resolution.
+- Future patches may require updated signatures.
+
+Do not load this release together with the old `STALKER2GameplayAspectFix.asi`.
+
+The release archive includes the ASI, default INI, README, license and third-party notices.
