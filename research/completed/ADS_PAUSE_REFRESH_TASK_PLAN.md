@@ -96,7 +96,7 @@ Identify the shared camera/viewmodel mode-transition refresh mechanism activated
 - `STALKER2AimRenderStateTrace.asi` was built successfully for manual ADS/cutscene/pause correlation; build success is not runtime evidence.
 - Manual runtime session produced only `TRACE hook installed: FUN_140A5A2CC aim/render state consumer.` and zero trace records.
 - `FUN_140A5A2CC` is rejected as an observable ADS path for the tested executable/scenario; do not continue upstream or downstream on this branch without new evidence.
-- Function-level static candidate chasing is paused after repeated zero-hit runtime results. The next task was `backlog/complete/ADS_STATE_DIFF_TASK_PLAN.md`: runtime state-diff/discovery before any new function-level hook.
+- Function-level static candidate chasing is paused after repeated zero-hit runtime results. The next task was the archived `research/completed/ADS_STATE_DIFF_TASK_PLAN.md`: runtime state-diff/discovery before any new function-level hook.
 
 ### Batch 3 — Causal assessment
 

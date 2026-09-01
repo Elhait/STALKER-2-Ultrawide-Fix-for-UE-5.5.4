@@ -82,7 +82,7 @@ Identify the separate weapon/viewmodel camera projection owner responsible for t
 - The tracer validates executable accessibility for the Steam 2.0.2 accessor RVAs, installs the three observation hooks with rollback, logs bounded accessor sequences, caller/object context, mode byte `+0x262`, vtable and `+0x610` target, and performs no game-state writes.
 - Build validation passed and produced `STALKER2WeaponViewmodelTrace.asi`.
 - Manual game testing completed for the available scenario: the tracer installed successfully but recorded no calls to the three first-person accessor hooks. This rejects that accessor family as the direct active runtime path for the observed transition, without proving that the functions are globally unused.
-- The direct weapon/viewmodel accessor path is therefore closed as a negative diagnostic result. Pause-triggered rebuild/refresh ownership was tracked separately in `backlog/complete/ADS_PAUSE_REFRESH_TASK_PLAN.md`.
+- The direct weapon/viewmodel accessor path is therefore closed as a negative diagnostic result. Pause-triggered rebuild/refresh ownership was tracked separately in `research/completed/ADS_PAUSE_REFRESH_TASK_PLAN.md`.
 
 ## Risks and safe failure
 

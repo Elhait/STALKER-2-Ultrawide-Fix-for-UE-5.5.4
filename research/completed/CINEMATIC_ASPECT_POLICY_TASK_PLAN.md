@@ -36,7 +36,7 @@ mode uses the observed runtime aspect.
 ## Expected files or areas
 
 - `src/experimental_cinematic_21_9_combined_fix_204.cpp`
-- `backlog/CINEMATIC_ASPECT_POLICY_TASK_PLAN.md`
+- `research/completed/CINEMATIC_ASPECT_POLICY_TASK_PLAN.md`
 - rebuilt test ASI and generated INI.
 
 ## Batches and validation

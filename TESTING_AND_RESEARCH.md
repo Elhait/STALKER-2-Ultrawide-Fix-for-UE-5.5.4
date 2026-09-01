@@ -22,6 +22,31 @@ same session. `Native` bypasses both cinematic hooks; forced 16:9, 21:9 and
 `FovCorrection` option is removed from generated INIs and migrated out of
 existing INIs.
 
+## Research progression
+
+The project evolved through these bounded evidence phases:
+
+```text
+Gameplay camera-state discovery
+→ gameplay writer identification
+→ dynamic signature resolution
+→ camera rebuild / re-arm lifecycle
+→ cinematic lifecycle discovery
+→ shared authoritative camera state
+→ cinematic aspect-writer provenance
+→ live cinematic FOV consumption boundary
+→ Hor+ FOV feasibility
+→ combined cinematic correction
+→ unified gameplay/cinematic coordinator
+→ post-cinematic handoff investigation
+→ 21:9 gameplay regression analysis
+→ dynamic runtime Auto aspect policy
+```
+
+The detailed historical plans are preserved in the
+[`research archive`](research/), while the active follow-up work remains in
+the [`backlog`](backlog/).
+
 ## Confirmed 2.0.4 evidence
 
 ### Gameplay

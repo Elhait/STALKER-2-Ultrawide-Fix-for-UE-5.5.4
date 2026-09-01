@@ -1,6 +1,41 @@
 # Task Log
 
-This document records changes and completed work in the project. It serves as a changelog, including research, documentation and organizational tasks that do not necessarily modify the mod.
+This document records evidence-backed research outcomes, completed implementations and exceptional repository housekeeping. Ordinary README, release-text, index and link-maintenance edits are intentionally not logged here.
+
+## 2026-09-01 — Organize reverse-engineering research archive
+
+### Scope and non-goals
+
+- Separate active task plans from completed, deferred and rejected research after the published v0.4.0 release.
+- Preserve all historical plans and evidence; no source, ASI, INI, release archive or build artifact changes.
+- No new reverse-engineering or runtime validation.
+
+### Changed paths
+
+- Added `backlog/README.md` and moved six active plans into `backlog/active/`.
+- Added `research/README.md`.
+- Moved completed plans into `research/completed/`, deferred plans into
+  `research/deferred/` and negative/blocked branches into `research/rejected/`.
+- Updated `TESTING_AND_RESEARCH.md` with research progression and archive links.
+- Updated workspace `AGENTS.md` to describe the unified stable release scope.
+- Preserved `backlog/TASKLOG.md` at the backlog root.
+
+### Validation and Git state
+
+- Repository: `main`, baseline `a63c292` (`release: prepare STALKER2UltrawideFix v0.4.0`).
+- Working tree contains the planned path migration and documentation changes;
+  no unrelated implementation changes were observed.
+- `git diff --check` passed; no runtime validation was applicable.
+
+### Result
+
+- Completed: active backlog and research archive are separated and indexed.
+- Deferred: future curation of `research/reports/` and `research/evidence/`.
+- Blocked: none.
+
+Patch summary: reorganized 77 historical task plans without deleting research content and added navigation for active and archived work.
+
+Changelog summary: clarified the research archive and documented the progression from gameplay writer discovery to the unified dynamic Auto policy.
 
 ## 2026-09-01 — Remove standalone cinematic FOV toggle for 0.3.1
 

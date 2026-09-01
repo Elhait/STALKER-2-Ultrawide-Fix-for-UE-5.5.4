@@ -37,7 +37,7 @@ Identify the semantic boundary between the active cinematic phase and the cinema
 - `src/cutscene_fov_semantics_trace.cpp` or a narrowly named successor for the diagnostic tracer.
 - `build-artifacts/test-scripts/` for the tracer build script if required.
 - `build-artifacts/test-asi/` for disposable tracer output.
-- `backlog/CUTSCENE_HORPLUS_IMPLEMENTATION_TASK_PLAN.md` only after a confirmed design decision changes implementation scope.
+- `backlog/active/CUTSCENE_HORPLUS_IMPLEMENTATION_TASK_PLAN.md` only after a confirmed design decision changes implementation scope.
 - `backlog/TASKLOG.md` remains deferred until the scoped diagnostic task and any manual validation are complete.
 
 ## Batches
