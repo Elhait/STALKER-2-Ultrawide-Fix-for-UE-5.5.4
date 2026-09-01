@@ -25,10 +25,9 @@ Enabled=true
 [Cinematics]
 ; Auto, Native, 16:9, 21:9, 32:9
 AspectRatio=Auto
-FovCorrection=true
 ```
 
-`Auto` uses the runtime camera aspect. `Native` bypasses the cinematic aspect override. Forced ratios provide custom framing independently of the display; for example, `32:9` on a 16:9 display produces letterboxed cinematics.
+`Auto` uses the runtime camera aspect and matching Hor+ FOV. `Native` bypasses the cinematic aspect and FOV overrides. Forced ratios provide custom framing and matching FOV independently of the display; for example, `32:9` on a 16:9 display produces letterboxed cinematics.
 
 ## Compatibility and validation
 

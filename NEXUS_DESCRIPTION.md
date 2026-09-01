@@ -65,26 +65,23 @@ Enabled=true
 [Cinematics]
 ; Auto, Native, 16:9, 21:9, 32:9
 AspectRatio=Auto
-
-; Apply Hor+ FOV correction for the selected aspect.
-FovCorrection=true
 ```
 
 `Gameplay.Enabled=false` disables the gameplay aspect correction while leaving
 cinematic options available.
 
-`AspectRatio=Auto` follows the game's current runtime camera aspect. `Native`
-leaves the game's cinematic aspect behavior untouched. The forced modes select
-the cinematic framing independently of the physical display:
+`AspectRatio=Auto` follows the game's current runtime camera aspect and applies
+matching Hor+ FOV. `Native` leaves the game's cinematic aspect and FOV behavior
+untouched. The forced modes select the cinematic framing independently of the
+physical display:
 
 - `16:9` — forces 16:9 cinematic framing.
 - `21:9` — 21:9 cinematic framing.
 - `32:9` — 32:9 cinematic framing.
 
 For example, forcing `32:9` on a 16:9 display produces a wider cinematic frame
-with black bars above and below. `FovCorrection=true` applies the matching Hor+
-FOV correction for the selected framing. Restart the game after changing the
-configuration.
+with black bars above and below and matching FOV. Restart the game after
+changing the configuration.
 
 ## Requirements
 

@@ -1,6 +1,6 @@
 # Testing And Research Summary
 
-## Current unified mod
+## Current unified mod — v0.4.0
 
 The current artifact is `STALKER2UltrawideFix.asi`, intended to replace the
 older `STALKER2GameplayAspectFix.asi`. Do not load both files together; remove
@@ -13,13 +13,14 @@ Enabled=true
 [Cinematics]
 ; Auto, Native, 16:9, 21:9, 32:9
 AspectRatio=Auto
-FovCorrection=true
 ```
 
 The INI is created automatically beside the ASI when missing. `Auto` uses the
-runtime camera aspect; `Native` bypasses the cinematic aspect hook; forced
-16:9, 21:9 and 32:9 modes provide custom cinematic framing. Legacy
-`AspectFix`/`FovFix` keys remain accepted for compatibility.
+runtime camera aspect and updates when the game resolution changes during the
+same session. `Native` bypasses both cinematic hooks; forced 16:9, 21:9 and
+32:9 modes provide custom cinematic framing with matching FOV. The obsolete
+`FovCorrection` option is removed from generated INIs and migrated out of
+existing INIs.
 
 ## Confirmed 2.0.4 evidence
 
@@ -51,6 +52,12 @@ runtime camera aspect; `Native` bypasses the cinematic aspect hook; forced
   `126.87` from authored FOV `90`.
 - Forced 16:9, 21:9 and 32:9 cinematic framing was user-tested. Forced 32:9
   at 2560x1440 correctly produced cinematic letterbox bars.
+- `Auto` was user-tested without restarting through
+  `16:9 → 21:9 → 32:9 → 16:9 → 21:9 → 32:9`; each cinematic aspect store and
+  ENTER FOV boundary used the current aspect. Cinematic EXIT recovery into
+  gameplay also passed at each tested aspect.
+- Forced 21:9 uses the canonical 3440x1440 aspect `2.3888889`, producing
+  cinematic FOV about `106.688` from authored FOV `90`.
 - Native cinematic EXIT FOV recovery remains game-owned and untouched.
 - Startup logs record uppercase SHA-256 identities for the loaded ASI and game
   executable. The tested 2.0.4 game identity was
@@ -64,8 +71,8 @@ address relocation within a compatible build, but does not guarantee support
 for 2.0.5 or another patch. A new executable identity requires fresh resolver
 and runtime validation.
 
-The latest policy build was build-validated with ASI SHA-256:
-`949B61998A49FB04276D91B64BC5D3F087989999CA2779ACD8C703E97DBF7607`.
+The validated v0.4.0 candidate was build-validated with ASI SHA-256:
+`A763D3D275991FC2CDBC34A3CB5585FEF0A1CC13E0ECF0B2367188D123338ABF`.
 
 ## Closed and deferred research
 
@@ -81,16 +88,18 @@ The latest policy build was build-validated with ASI SHA-256:
   evidence set without a promoted renderer consumer.
 - Weapon/viewmodel ownership research remains deferred pending a new validated
   object or downstream projection anchor.
-- Dynamic resolution changes during a running session remain unvalidated;
-  restart after changing the display/game resolution is the safe assumption.
+- Dynamic resolution changes during a running session are validated for
+  `AspectRatio=Auto` across 16:9, 21:9 and 32:9. Configuration file changes
+  still require a game restart.
 
 ## Testing limits
 
 - Build success proves compilation and linking only.
 - A signature match is not hook proof without decode and runtime evidence.
 - Current cinematic and policy results are validated on Steam 2.0.4 only.
-- `Native` and `FovCorrection=false` are supported bypass branches but were not
-  required for the current release validation matrix.
+- `Native`, `Auto`, forced `16:9`, forced `21:9` and forced `32:9` were all
+  runtime-tested on the native 5120x1440 display or in the Auto hot-switch
+  sequence.
 - The brief post-cinematic projection/FOV handoff seam remains a known
   limitation of the experimental cinematic integration.
 
@@ -98,7 +107,8 @@ The latest policy build was build-validated with ASI SHA-256:
 
 - Remove the older `STALKER2GameplayAspectFix.asi` before installing the unified
   ASI.
-- Include only `STALKER2UltrawideFix.asi` and its INI in the release package.
+- Include only `STALKER2UltrawideFix.asi`, its INI and the required release
+  documentation in the release package.
 - Keep research ASIs, historical binaries, logs and Ghidra projects out of the
   release archive.
 - Preserve the runtime identity line in support reports.

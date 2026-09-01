@@ -2,6 +2,136 @@
 
 This document records changes and completed work in the project. It serves as a changelog, including research, documentation and organizational tasks that do not necessarily modify the mod.
 
+## 2026-09-01 — Remove standalone cinematic FOV toggle for 0.3.1
+
+### Scope and non-goals
+
+- Make cinematic FOV behavior part of the selected `AspectRatio` policy.
+- Migrate existing INI files by removing obsolete `Cinematics.FovCorrection`
+  and its exact generated comment.
+- No new RE, signature changes, gameplay algorithm changes, runtime game test,
+  release upload or Git history mutation.
+
+### Changed paths
+
+- Updated `src/experimental_cinematic_21_9_combined_fix_204.cpp`.
+- Updated public README, release notes, Nexus description and GitHub release
+  body to remove the obsolete option.
+- Updated generated/test and release INI files.
+- Added `backlog/CINEMATIC_FOV_POLICY_CLEANUP_031_TASK_PLAN.md`.
+- Rebuilt `build-artifacts/test-asi/STALKER2UltrawideFix.asi`.
+
+### Implementation result
+
+- `Native` now bypasses both cinematic aspect and FOV correction.
+- `Auto` and forced aspect modes use their selected aspect policy for the
+  existing cinematic FOV path.
+- New INI files contain only `Gameplay.Enabled` and `Cinematics.AspectRatio`.
+- Existing INI files are migrated in place without rewriting unrelated keys or
+  comments; only the obsolete key and its exact generated comment are removed.
+
+### Git review
+
+- Read-only status and diff review performed; `git diff --check` passed.
+- Existing staged, unstaged and untracked user changes were preserved. No Git
+  staging, commit, reset, checkout or history rewrite was performed.
+
+### Validation and limits
+
+- Unified ASI build succeeded with the existing Visual Studio build script.
+- Candidate ASI SHA-256 before the 16:9/21:9 cache correction:
+  `2C58405AA9ABE6EC78B2DEB1F01B2C5DB431535AE268327FA05B8E804FD384EE`.
+- Follow-up correction: preserve the cached ultrawide aspect across gameplay
+  Auto restore while still accepting native 16:9 from a readable runtime
+  object. Rebuild succeeded; current candidate SHA-256 is
+  `6D1825FD0EE1EB8CC42D0A6D80E70A5B42788098069B40DBB4393377F246F5A5`.
+- Follow-up correction: in `Auto` mode, the cinematic aspect store now uses
+  the cached runtime camera aspect, matching the FOV boundary instead of
+  reading the object's already-native 16:9 value after the native store.
+  Rebuild succeeded; latest candidate SHA-256 is
+  `C657D9EE55C1B3951441331CA8F29525DD4ACFFB5544AEDFC8DC1703A2292D82`.
+- Follow-up correction: valid aspects from the gameplay/runtime camera,
+  including native 16:9 after a hot resolution change, now refresh the Auto
+  cache. The cinematic store remains excluded as a cache source. Build
+  succeeded; follow-up candidate SHA-256 is
+  `74496AD5EE4374C688410018017EFDE7A84B5151BFC1BCB65982D5728A2AD4FB`.
+- Confirmed `FovCorrection` is absent from public documents and generated INI;
+  source references are limited to migration and compatibility handling.
+- No injected runtime test was performed in this batch. User validation of
+  `Native`, `Auto` and forced framing remains required.
+
+### Completed / remaining / deferred
+
+- Completed: policy cleanup, INI migration implementation, documentation and
+  candidate build; corrected the `Auto` 16:9 resolver so invalid zero-aspect
+  values cannot reach the cinematic store; aligned the `Auto` aspect-store
+  target with the runtime aspect used by cinematic FOV.
+- Remaining: regression of `Native` and forced framing modes for the 0.3.1
+  release decision.
+- Completed: one-session hot-resolution `Auto` test across 16:9, 21:9 and 32:9
+  with cinematic EXIT recovery into gameplay.
+- Deferred: packaging/publishing `0.3.1`, weapon/viewmodel FOV and dynamic
+  resolution behavior.
+
+### Follow-up refinement — exclude self-authored Auto restore from cache
+
+- Runtime evidence showed that the broad valid-aspect cache update treated the
+  fix's own `Auto restore` to native 16:9 as a new runtime aspect, so later
+  cinematics stayed at 16:9.
+- Added source-aware suppression for that self-authored restore while keeping
+  valid 16:9 from a new gameplay/runtime camera source eligible for caching.
+- Rebuilt successfully; follow-up candidate SHA-256 is
+  `7404D5288E8F60E925C497B055143EF97EA79798E511850DE908ABBB32376453`.
+- `git diff --check` passed.
+
+### Runtime validation — hot aspect changes
+
+- Validated candidate SHA-256
+  `7404D5288E8F60E925C497B055143EF97EA79798E511850DE908ABBB32376453` in one
+  session through `16:9 → 21:9 → 32:9 → 16:9 → 21:9 → 32:9`.
+- Cinematic `Auto` resolved each runtime aspect correctly: `1.77778`,
+  `2.38889`, `3.55556`, then the same sequence again.
+- Matching cinematic FOV values were observed: `90`, `106.688`, `126.87`.
+- Each tested cinematic EXIT recovered to gameplay and re-entered the normal
+  gameplay transition without a restart. User reported all tested views were
+  visually correct.
+- This closes the hot-resolution cache regression for the validated 2.0.4
+  executable. Weapon/viewmodel FOV remains a separate known game issue.
+
+### Policy regression — native 5120×1440 display
+
+- Validated `Native`, forced `16:9`, forced `21:9` and forced `32:9` with the
+  same candidate and game executable identity.
+- `Native` correctly bypassed cinematic aspect/FOV hooks while gameplay hooks
+  remained active.
+- Forced cinematic modes produced `1.77778 / FOV 90`, `2.33333 / FOV 105.392`
+  and `3.55556 / FOV 126.87`, respectively. The user reported all views as
+  visually correct.
+- Follow-up policy correction: forced `21:9` now uses canonical `3440×1440`
+  aspect `2.3888889`, matching `Auto` on a real 3440×1440 display instead of
+  the abstract mathematical `21/9` value.
+- Rebuilt successfully; new candidate SHA-256 is
+  `A763D3D275991FC2CDBC34A3CB5585FEF0A1CC13E0ECF0B2367188D123338ABF`.
+- `git diff --check` passed. The previous matrix remains evidence for
+  unchanged branches.
+- Focused forced-`21:9` runtime validation passed: `Global cinematic ENTER`
+  and `Cinematic aspect store` both used `aspect=2.38889`, with transformed
+  FOV `106.688`. The user reported the view was visually correct.
+- This completes the planned cinematic policy regression for the validated
+  Steam 2.0.4 / UE 5.5.4 target. `Native` and forced policies are now runtime
+  validated alongside the previously completed `Auto` hot-switch matrix.
+
+### Patch summary
+
+Removed the contradictory standalone cinematic FOV toggle and made FOV behavior
+follow the selected cinematic aspect policy, with safe migration of old INIs.
+
+### Changelog summary
+
+Version 0.3.1 simplifies cinematic configuration: `Native` preserves native
+cinematic behavior, while `Auto` and forced framing modes apply matching Hor+
+FOV automatically. The 16:9 `Auto` black-screen case is fail-safe corrected.
+
 ## 2026-09-01 — Create reusable Nexus description for 0.3.0
 
 ### Scope and non-goals

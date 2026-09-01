@@ -49,7 +49,8 @@ namespace
     constexpr std::uintptr_t kAspectOffset = 0x254;
     constexpr std::uintptr_t kFlagsOffset = 0x259;
     constexpr float kWideAspect = 32.0f / 9.0f;
-    constexpr float kCinemaAspect = 21.0f / 9.0f;
+    // Canonical PC 21:9 framing used by the validated 3440x1440 profile.
+    constexpr float kCinemaAspect = 3440.0f / 1440.0f;
     constexpr float kNativeAspect = 16.0f / 9.0f;
     constexpr std::uint8_t kCinematicStorePrefix[] = { 0xC7, 0x80, 0x54, 0x02, 0x00, 0x00 };
     constexpr std::uint8_t kCinematicOriginalImmediate[] = { 0x39, 0x8E, 0xE3, 0x3F };
@@ -89,7 +90,6 @@ namespace
         bool gameplayEnabled{true};
         CinematicAspectPolicy cinematicAspectPolicy{CinematicAspectPolicy::Auto};
         bool cinematicAspectPolicyExplicit{};
-        bool cinematicFovFix{true};
     };
 
     HMODULE g_module{};
@@ -110,7 +110,8 @@ namespace
     std::uint8_t g_cinematicOriginalImmediate[sizeof(kCinematicOriginalImmediate)]{};
     bool g_cinematicAspectPatched{};
     SafetyHookMid g_cinematicAspectStoreHook;
-    std::atomic<float> g_lastObservedAspect{0.0f};
+    std::atomic<float> g_lastObservedAspect{kNativeAspect};
+    std::atomic<std::uintptr_t> g_lastAutoRestoreSource{};
 #ifdef GAMEPLAY_ONE_SHOT_CINEMATIC_TRIGGER
     std::atomic_bool g_oneShotCinematicTriggerArmed{false};
 #endif
@@ -161,6 +162,11 @@ namespace
     bool IsUltrawideAspect(float aspect)
     {
         return std::isfinite(aspect) && aspect > kNativeAspect + 0.001f;
+    }
+
+    bool IsValidAspect(float aspect)
+    {
+        return std::isfinite(aspect) && aspect > 0.0f;
     }
 
     template <typename... Args>
@@ -277,23 +283,70 @@ namespace
         return g_config.cinematicAspectPolicy != CinematicAspectPolicy::Native;
     }
 
+    bool RemoveObsoleteCinematicFovSetting(const std::filesystem::path& path)
+    {
+        std::ifstream input(path);
+        if (!input) return false;
+
+        constexpr char kGeneratedFovComment[] =
+            "; Apply Hor+ FOV correction for the selected aspect.";
+        std::vector<std::string> lines;
+        std::string line;
+        while (std::getline(input, line)) lines.push_back(std::move(line));
+
+        bool inCinematics = false;
+        bool removed = false;
+        std::vector<std::string> migrated;
+        migrated.reserve(lines.size());
+        for (const auto& original : lines) {
+            const auto trimmed = Trim(original);
+            if (trimmed.size() >= 2 && trimmed.front() == '[' && trimmed.back() == ']')
+                inCinematics = Trim(trimmed.substr(1, trimmed.size() - 2)) == "Cinematics";
+
+            const auto separator = trimmed.find('=');
+            const bool obsoleteFovSetting = inCinematics && separator != std::string::npos &&
+                Trim(trimmed.substr(0, separator)) == "FovCorrection";
+            if (obsoleteFovSetting) {
+                if (!migrated.empty() && Trim(migrated.back()) == kGeneratedFovComment)
+                    migrated.pop_back();
+                removed = true;
+                continue;
+            }
+            migrated.push_back(original);
+        }
+
+        if (!removed) return false;
+        std::ofstream output(path, std::ios::out | std::ios::trunc);
+        if (!output) return false;
+        for (std::size_t index = 0; index < migrated.size(); ++index) {
+            output << migrated[index];
+            if (index + 1 < migrated.size()) output << '\n';
+        }
+        return static_cast<bool>(output);
+    }
+
     bool LoadFeatureConfig(const std::filesystem::path& path)
     {
         if (!std::filesystem::exists(path)) {
             std::ofstream created(path, std::ios::out | std::ios::trunc);
             if (!created) return false;
-            created << "; STALKER 2 Ultrawide Fix configuration\n"
-                << "; Changes apply after restarting the game.\n"
+            created << "; STALKER 2 Ultrawide Fix v0.4.0\n"
+                << "; Author: Elhait\n"
+                << "; GitHub: https://github.com/Elhait/STALKER-2-Ultrawide-Fix-for-UE-5.5.4\n"
+                << "; Nexus Mods: https://www.nexusmods.com/stalker2heartofchornobyl/mods/2416\n"
+                << "; Configuration changes apply after restarting the game.\n"
                 << "\n[Gameplay]\n"
                 << "; Correct gameplay aspect behavior on ultrawide displays.\n"
                 << "Enabled=true\n"
                 << "\n[Cinematics]\n"
                 << "; Auto, Native, 16:9, 21:9, 32:9\n"
-                << "AspectRatio=Auto\n"
-                << "; Apply Hor+ FOV correction for the selected aspect.\n"
-                << "FovCorrection=true\n";
+                << "AspectRatio=Auto\n";
             return static_cast<bool>(created);
         }
+
+        const bool migrated = RemoveObsoleteCinematicFovSetting(path);
+        if (migrated)
+            Log("Config migration: removed obsolete Cinematics.FovCorrection setting.");
 
         std::ifstream input(path);
         if (!input) return false;
@@ -320,14 +373,11 @@ namespace
             bool value = true;
             if (!ParseBool(line.substr(separator + 1), value)) continue;
             if (section == "Gameplay" && key == "Enabled") g_config.gameplayEnabled = value;
-            else if (section == "Cinematics" && key == "FovCorrection") g_config.cinematicFovFix = value;
             else if (section == "Cinematics" && key == "AspectFix" && !g_config.cinematicAspectPolicyExplicit)
                 g_config.cinematicAspectPolicy = value ? CinematicAspectPolicy::Auto : CinematicAspectPolicy::Native;
-            else if (section == "Cinematics" && key == "FovFix") g_config.cinematicFovFix = value;
             else if (section == "Features" && key == "GameplayAspectFix") g_config.gameplayEnabled = value;
             else if (section == "Features" && key == "CinematicAspectFix" && !g_config.cinematicAspectPolicyExplicit)
                 g_config.cinematicAspectPolicy = value ? CinematicAspectPolicy::Auto : CinematicAspectPolicy::Native;
-            else if (section == "Features" && key == "CinematicFovFix") g_config.cinematicFovFix = value;
         }
         return true;
     }
@@ -357,9 +407,10 @@ namespace
     float ReadRuntimeAspect(std::uintptr_t object)
     {
         float aspect = 0.0f;
-        if (object && SafeRead(object + kAspectOffset, aspect) && IsUltrawideAspect(aspect))
+        if (object && SafeRead(object + kAspectOffset, aspect) && IsValidAspect(aspect))
             return aspect;
-        return g_lastObservedAspect.load(std::memory_order_acquire);
+        const float observed = g_lastObservedAspect.load(std::memory_order_acquire);
+        return IsValidAspect(observed) ? observed : kNativeAspect;
     }
 
     float ResolveCinematicAspect(std::uintptr_t object)
@@ -368,9 +419,8 @@ namespace
         case CinematicAspectPolicy::Forced16x9: return kNativeAspect;
         case CinematicAspectPolicy::Forced21x9: return kCinemaAspect;
         case CinematicAspectPolicy::Forced32x9: return kWideAspect;
-        case CinematicAspectPolicy::Auto:
-        case CinematicAspectPolicy::Native:
-            return ReadRuntimeAspect(object);
+        case CinematicAspectPolicy::Auto: return ReadRuntimeAspect(object);
+        case CinematicAspectPolicy::Native: return kNativeAspect;
         }
         return kNativeAspect;
     }
@@ -387,7 +437,12 @@ namespace
     {
         const auto targetObject = static_cast<std::uintptr_t>(context.rax);
         const float observedAspect = ReadRuntimeAspect(targetObject);
-        const float aspect = ResolveCinematicAspect(targetObject);
+        // For Auto, the native store may already have written 16:9 into the
+        // object by the time this boundary is observed. Use the cached runtime
+        // camera aspect, which is also the source used by the FOV boundary.
+        const float resolvedAspect = ResolveCinematicAspect(
+            g_config.cinematicAspectPolicy == CinematicAspectPolicy::Auto ? 0 : targetObject);
+        const float aspect = IsValidAspect(resolvedAspect) ? resolvedAspect : kNativeAspect;
         const bool writable = targetObject &&
             targetObject <= (std::numeric_limits<std::uintptr_t>::max)() - kAspectOffset &&
             IsWritable(targetObject + kAspectOffset, sizeof(aspect));
@@ -396,7 +451,7 @@ namespace
             Log("Cinematic aspect store: object=0x", std::hex, targetObject, std::dec,
                 " aspect=", aspect, " policy=", CinematicAspectPolicyName(g_config.cinematicAspectPolicy),
                 " source=", g_config.cinematicAspectPolicy == CinematicAspectPolicy::Auto
-                    ? (IsUltrawideAspect(observedAspect) ? "runtime-camera" : "native-fallback")
+                    ? (IsValidAspect(observedAspect) ? "runtime-camera" : "native-fallback")
                     : "configured", ".");
         } else {
             Log("Cinematic aspect store refused: target object was not writable; native store skipped.");
@@ -646,7 +701,14 @@ namespace
         float aspect = 0.0f;
         std::uint8_t flags = 0;
         if (!SafeRead(source + kAspectOffset, aspect) || !SafeRead(source + kFlagsOffset, flags)) return;
-        if (IsUltrawideAspect(aspect))
+        const auto stateBeforeObservation = g_state.load(std::memory_order_acquire);
+        const bool isOwnAutoRestore = stateBeforeObservation == ReplayState::Complete &&
+            std::fabs(aspect - kNativeAspect) <= 0.001f &&
+            g_lastAutoRestoreSource.load(std::memory_order_acquire) == source;
+        // Cache the authoritative gameplay/runtime camera aspect, including
+        // native 16:9 after a live resolution change. Do not treat the native
+        // value left by this fix's own Auto restore as a new runtime aspect.
+        if (!isOwnAutoRestore && IsValidAspect(aspect))
             g_lastObservedAspect.store(aspect, std::memory_order_release);
 #ifdef GAMEPLAY_ONE_SHOT_CINEMATIC_TRIGGER
         if (g_oneShotCinematicTriggerArmed.load(std::memory_order_acquire) &&
@@ -736,6 +798,7 @@ namespace
             // On the following camera update, restore Auto's native aspect and flags.
             if (WriteAspectAndFlags(source, kNativeAspect, 0x4)) {
                 g_state.store(ReplayState::Complete, std::memory_order_relaxed);
+                g_lastAutoRestoreSource.store(source, std::memory_order_release);
                 Log("Replayed Auto restore: fov=", fov, " aspect=", kNativeAspect, " flags=0x4.");
             } else {
                 Log("Replay refused: Auto-restore fields were not writable.");
@@ -903,19 +966,20 @@ namespace
 
     void TraceCinematicEnter(SafetyHookContext& context)
     {
-        if (g_config.cinematicFovFix) {
+        const bool cinematicFovEnabled = CinematicAspectOverrideEnabled();
+        if (cinematicFovEnabled) {
             bool expected = false;
             if (!g_cinematicFovApplied.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) return;
         }
         const float before = context.xmm0.f32[0];
         const float aspect = ResolveCinematicAspect(0);
-        const float after = g_config.cinematicFovFix && std::isfinite(before) && std::isfinite(aspect) &&
+        const float after = cinematicFovEnabled && std::isfinite(before) && std::isfinite(aspect) &&
             before > 1.0f && before < 179.0f && aspect > 1.0f
             ? CinematicHorPlus(before, aspect) : before;
         if (std::isfinite(after) && after > 1.0f && after < 179.0f) context.xmm0.f32[0] = after;
         g_coordinator.store(CoordinatorState::CinematicActive, std::memory_order_release);
         Log("Global cinematic ENTER: aspect=", aspect, " authoredFov=", before,
-            " transformedFov=", context.xmm0.f32[0], " fovFix=", g_config.cinematicFovFix,
+            " transformedFov=", context.xmm0.f32[0],
             " aspectPolicy=", CinematicAspectPolicyName(g_config.cinematicAspectPolicy), ".",
             " Gameplay replay suppressed.");
     }
@@ -953,7 +1017,7 @@ namespace
         if (!g_config.gameplayEnabled) {
             float aspect = 0.0f;
             const auto source = static_cast<std::uintptr_t>(context.rsi);
-            if (SafeRead(source + kAspectOffset, aspect) && IsUltrawideAspect(aspect))
+            if (SafeRead(source + kAspectOffset, aspect) && IsValidAspect(aspect))
                 g_lastObservedAspect.store(aspect, std::memory_order_release);
             return;
         }
@@ -1047,8 +1111,7 @@ namespace
             if (!LoadFeatureConfig(configPath))
                 Log("Configuration unavailable; using defaults with all fixes enabled.");
             Log("Configuration: Gameplay.Enabled=", g_config.gameplayEnabled,
-                " Cinematic.AspectRatio=", CinematicAspectPolicyName(g_config.cinematicAspectPolicy),
-                " Cinematic.FovCorrection=", g_config.cinematicFovFix, ".");
+                " Cinematic.AspectRatio=", CinematicAspectPolicyName(g_config.cinematicAspectPolicy), ".");
             Log("Gameplay aspect fix loaded. FOV is preserved from the game's settings.");
             if (CinematicAspectOverrideEnabled()) {
                 std::uint8_t* cinematicAspectStore = nullptr;
@@ -1059,7 +1122,7 @@ namespace
             } else {
                 Log("Cinematic aspect policy is Native; aspect store hook bypassed.");
             }
-            if (CinematicAspectOverrideEnabled() || g_config.cinematicFovFix) {
+            if (CinematicAspectOverrideEnabled()) {
                 std::uint8_t* cinematicEnter = nullptr;
                 std::uint8_t* cinematicExit = nullptr;
                 if (!ResolveCinematicFovCallsites(cinematicEnter, cinematicExit))
@@ -1069,7 +1132,7 @@ namespace
                 if (!g_cinematicEnterHook || !g_cinematicExitHook)
                     throw std::runtime_error("cinematic coordinator hook creation failed");
             }
-            if (g_config.gameplayEnabled || g_config.cinematicFovFix) {
+            if (g_config.gameplayEnabled || CinematicAspectOverrideEnabled()) {
                 if (!VerifyExecutableAndInstruction())
                     throw std::runtime_error("camera-writer signature or validated FOV instruction did not match");
                 Log(g_config.gameplayEnabled
