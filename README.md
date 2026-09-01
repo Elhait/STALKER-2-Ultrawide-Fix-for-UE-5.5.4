@@ -84,5 +84,4 @@ This project is independent and is not a release of Lyall's STALKER2Tweak.
 ## Support development
 
 - [Ko-fi](https://ko-fi.com/elhait)
-- PayPal: `entoni97l@gmail.com`
 - [Donatello](https://donatello.to/Elhait)
