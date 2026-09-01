@@ -1,80 +1,104 @@
 # Testing And Research Summary
 
-## Stable Gameplay Aspect Fix
+## Current unified mod
 
-### Confirmed source and runtime evidence
+The current artifact is `STALKER2UltrawideFix.asi`, intended to replace the
+older `STALKER2GameplayAspectFix.asi`. Do not load both files together; remove
+the older ASI before installing the unified one.
 
-The stable gameplay module uses a dynamic `.text` signature resolver. It does not depend on a fixed RVA, executable hash, timestamp or image size. Installation requires exactly one complete signature match and successful instruction validation as:
+```ini
+[Gameplay]
+Enabled=true
 
-```text
-MOVSS [RBX+0x30], XMM0
+[Cinematics]
+; Auto, Native, 16:9, 21:9, 32:9
+AspectRatio=Auto
+FovCorrection=true
 ```
 
-The resolver refuses safely on ambiguity, decode failure or instruction mismatch. The player's selected FOV is preserved; the module applies the observed aspect-state transition rather than a hard-coded FOV multiplier.
+The INI is created automatically beside the ASI when missing. `Auto` uses the
+runtime camera aspect; `Native` bypasses the cinematic aspect hook; forced
+16:9, 21:9 and 32:9 modes provide custom cinematic framing. Legacy
+`AspectFix`/`FovFix` keys remain accepted for compatibility.
 
-Manual testing at 5120×1440 (32:9) confirmed that the stable gameplay ASI loads and reapplies the gameplay aspect correction after the tested cutscene transition. This is runtime evidence for the tested executable/session only, not a general compatibility guarantee for newer builds.
+## Confirmed 2.0.4 evidence
 
-The cinematic state is 16:9 (`aspect=1.777778`) with black bars, while the native gameplay state is 32:9 (`aspect=3.555556`). These values identify the two aspect domains, but the exact direction of every transition must be established with event markers rather than inferred from sequence numbers alone.
+### Gameplay
 
-## Runtime State-Diff Result
+- The gameplay camera writer is resolved through a unique executable `.text`
+  signature and validated by decoding `MOVSS [RBX+0x30], XMM0`.
+- The generalized ultrawide predicate accepts the observed aspect above native
+  16:9 and preserves that source aspect during the existing two-pass correction.
+- 21:9 startup, manual `21:9 → 16:9 → 21:9`, death/load camera rebuild and
+  32:9 regression were user-tested successfully.
+- The player's selected FOV is preserved.
+- The separate weapon/viewmodel FOV issue after loading on 21:9 is a known
+  game-side problem and is outside this fix.
 
-The read-only transition tracer sampled 12 values from the validated gameplay-camera writer context and recorded manual markers for:
+### Cinematics
 
-```text
-F8  cutscene-exit
-F9  ads-enter
-F10 ads-exit
-F11 pause-open
-F12 pause-close
-```
+- Legacy 2.0.3 and current 2.0.4 transition topology was reconstructed;
+  current signature resolution is based on semantic instruction patterns, not
+  fixed cinematic RVAs.
+- The cinematic aspect store and ENTER/EXIT live-FOV consumer callsites are
+  uniquely signature-resolved and fail closed on ambiguity or validation
+  failure.
+- The validated current boundaries are the aspect store equivalent of
+  `RVA 0x6B7CB05` and live-FOV callsites equivalent to
+  `RVA 0x2EE6936`/`0x2EE69A7` in the tested 2.0.4 image.
+- On 21:9, runtime aspect `2.38889` produces correct cinematic framing and
+  Hor+ FOV. On 32:9, runtime aspect `3.55556` produces Hor+ FOV about
+  `126.87` from authored FOV `90`.
+- Forced 16:9, 21:9 and 32:9 cinematic framing was user-tested. Forced 32:9
+  at 2560x1440 correctly produced cinematic letterbox bars.
+- Native cinematic EXIT FOV recovery remains game-owned and untouched.
+- Startup logs record uppercase SHA-256 identities for the loaded ASI and game
+  executable. The tested 2.0.4 game identity was
+  `2ECC5D19FE37F97E3F7F2467D652B299B5A47F010FA49FD803A49A4A6930A409`.
 
-Marker-correlated runtime evidence showed:
+## Compatibility boundary
 
-- `outputFov == inputFov` throughout the tested session;
-- no distinct state pattern in `+0x248`, `+0x25C`, `+0x260..263` at ADS or pause correction;
-- no observable weapon/viewmodel-specific state change in the 12 sampled gameplay-camera fields;
-- the gameplay-camera state branch is therefore rejected as the causal owner of the weapon/viewmodel FOV symptom.
+Gameplay and cinematic boundaries use guarded signature resolution and runtime
+validation on the tested 2.0.4 executable. This supports resilience against
+address relocation within a compatible build, but does not guarantee support
+for 2.0.5 or another patch. A new executable identity requires fresh resolver
+and runtime validation.
 
-The known `[RBX+0x30]` context and its sampled neighboring fields should not be re-traced for this symptom without contradictory evidence.
+The latest policy build was build-validated with ASI SHA-256:
+`949B61998A49FB04276D91B64BC5D3F087989999CA2779ACD8C703E97DBF7607`.
 
-## Experimental Letterbox Research
+## Closed and deferred research
 
-BigChenga reference analysis identified two letterbox setter paths for the analyzed Steam 2.0.2 executable. The first experimental implementation caused an access violation reading `0xffffffffffffffff` during a cutscene. Removing the experimental ASI restored normal cutscene operation.
+- Static interpolation/scalar-shape candidate ranking was closed after
+  runtime rejection of unrelated candidates.
+- Legacy transition-hub mapping and live-FOV consumption recovery are closed;
+  the current live-FOV boundary is confirmed.
+- Aspect writer provenance and immediate-patch feasibility are closed for the
+  tested path.
+- Post-EXIT atomic B/C scheduling was tested and closed as a production
+  solution: it preserved mechanics but did not remove the visible seam.
+- Downstream writer/projection candidate searches were closed for the current
+  evidence set without a promoted renderer consumer.
+- Weapon/viewmodel ownership research remains deferred pending a new validated
+  object or downstream projection anchor.
+- Dynamic resolution changes during a running session remain unvalidated;
+  restart after changing the display/game resolution is the safe assumption.
 
-The experimental letterbox ASI is disabled and must not be used for further runtime testing until the hook boundaries and return contracts are redesigned and revalidated. Letterbox work remains separate from the stable gameplay ASI and is not release-ready.
+## Testing limits
 
-## Weapon/Viewmodel Research Status
+- Build success proves compilation and linking only.
+- A signature match is not hook proof without decode and runtime evidence.
+- Current cinematic and policy results are validated on Steam 2.0.4 only.
+- `Native` and `FovCorrection=false` are supported bypass branches but were not
+  required for the current release validation matrix.
+- The brief post-cinematic projection/FOV handoff seam remains a known
+  limitation of the experimental cinematic integration.
 
-The direct first-person reflection/accessor family and several statically plausible ADS/render candidates produced zero runtime hits in the tested scenarios. These paths are rejected or deferred as direct active owners; semantic names and generic renderer structures are not sufficient ownership evidence.
+## Release checklist
 
-The remaining research must start from a different weapon/viewmodel object or downstream projection consumer. No implementation hook, delayed replay, forced gameplay transition or hard-coded weapon FOV multiplier is justified by the current evidence.
-
-## Rejected Approaches
-
-### INI Aspect Constraint
-
-`AspectRatioAxisConstraint=AspectRatio_MaintainYFOV` did not fix the live gameplay camera state because the game overwrites the relevant runtime values after loading gameplay.
-
-### Fixed FOV Values
-
-Forcing FOV 90 changed the symptom but ignored the player's setting and did not reproduce the correct aspect transition. It was rejected.
-
-### Gameplay-Module Letterbox Hooks
-
-Combining the experimental letterbox hooks with the stable gameplay hook caused runtime instability. The two lifecycles remain separate.
-
-### Broad Renderer and Object Tracking
-
-Broad object-array, viewport, camera and generic renderer candidates did not provide reproducible weapon/viewmodel ownership. They were rejected or left unresolved rather than promoted from naming or proximity alone.
-
-### Dumper-7 SDK Dump
-
-Dumper-7 found `GObjects` but could not initialize `FNamePool` because the game layout was incompatible with its name decoder. It remains historical research evidence, not a basis for the stable fix.
-
-## Testing Boundaries
-
-- A build proves compilation only; it does not prove resolver operation or in-game behavior.
-- A signature match is not hook proof without decode and runtime validation.
-- Runtime conclusions apply only to the executable identity and manual test session that produced them.
-- Release archives and historical test artifacts must remain separate.
-- Future weapon/viewmodel research requires a new observable object/context or downstream projection anchor.
+- Remove the older `STALKER2GameplayAspectFix.asi` before installing the unified
+  ASI.
+- Include only `STALKER2UltrawideFix.asi` and its INI in the release package.
+- Keep research ASIs, historical binaries, logs and Ghidra projects out of the
+  release archive.
+- Preserve the runtime identity line in support reports.

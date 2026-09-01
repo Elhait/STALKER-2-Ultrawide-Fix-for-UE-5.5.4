@@ -2,6 +2,627 @@
 
 This document records changes and completed work in the project. It serves as a changelog, including research, documentation and organizational tasks that do not necessarily modify the mod.
 
+## 2026-09-01 — Create reusable Nexus description for 0.3.0
+
+### Scope and non-goals
+
+- Create a reusable Nexus Mods description for `STALKER2UltrawideFix.asi`
+  version `0.3.0`.
+- No source, ASI, INI or release archive changes; no external Nexus upload.
+
+### Changed paths
+
+- Added `NEXUS_DESCRIPTION.md` with current features, configuration,
+  installation, compatibility, limitations and Defender notice.
+- Added `backlog/NEXUS_DESCRIPTION_0_3_0_TASK_PLAN.md` for this bounded
+  documentation task.
+
+### Git review
+
+- Read-only Git review and `git diff --check` were performed.
+- Existing staged, unstaged and untracked user changes were preserved; no Git
+  staging, commit, reset, checkout or history rewrite was performed.
+
+### Validation and limits
+
+- Confirmed the description uses version `0.3.0`, Steam `2.0.4` and UE `5.5.4`.
+- Confirmed obsolete 2.0.3/gameplay-only claims are absent except for the old
+  ASI filename intentionally retained in upgrade instructions.
+- The description reflects existing runtime evidence; no new build or game
+  validation was performed.
+
+### Completed / remaining / deferred
+
+- Completed: reusable Nexus publication text.
+- Remaining: copy the text into Nexus and update it there when publishing.
+- Deferred: future-patch compatibility, dynamic resolution behavior and the
+  separate weapon/viewmodel FOV issue.
+
+### Patch summary
+
+Added a maintained Nexus-ready description for the unified 0.3.0 release.
+
+### Changelog summary
+
+Replaced the obsolete gameplay-only publication text with current unified
+gameplay, cinematic and custom framing documentation.
+
+## 2026-09-01 — Prepare version 0.3.0 release package
+
+### Scope and non-goals
+
+- Prepare the user-facing `0.3.0` package for `STALKER2UltrawideFix.asi`.
+- Update release documentation, include the generated INI and create a clean
+  distributable archive.
+- No upload to GitHub/Nexus, Git staging/commit, source changes or new runtime
+  experiment was performed in this packaging task.
+
+### Changed paths
+
+- Updated `release-assets/README.md` for the unified gameplay/cinematic fix.
+- Added `release-assets/STALKER2UltrawideFix.asi`.
+- Added `release-assets/STALKER2UltrawideFix.ini`.
+- Added `release-assets/STALKER2UltrawideFix-UE5.5.4-v0.3.0.zip`.
+- Updated `backlog/RELEASE_0_3_0_TASK_PLAN.md` with completed batch status.
+
+### Package contents
+
+The archive contains exactly:
+
+- `STALKER2UltrawideFix.asi`
+- `STALKER2UltrawideFix.ini`
+- `README.md`
+- `LICENSE.md`
+- `THIRD_PARTY_NOTICES.md`
+
+The historical `STALKER2GameplayAspectFix-2.0.2-v0.1.0-elhait.zip` remains
+untouched and is not part of the new package.
+
+### Git review
+
+- Read-only Git review was performed after packaging.
+- Existing staged, unstaged and untracked user changes were preserved; no
+  staging, commit, reset, checkout or history rewrite was performed.
+- The changed release and task-log paths were compared with the approved plan;
+  unrelated pre-existing worktree changes were left untouched.
+
+### Validation and limits
+
+- Archive creation succeeded and its exact five-file contents were verified.
+- `git diff --check` passed for the reviewed worktree.
+- SHA-256: ASI
+  `949B61998A49FB04276D91B64BC5D3F087989999CA2779ACD8C703E97DBF7607`.
+- SHA-256: INI
+  `C74C4E3383A2A539FDF296AF980D2F474C03F37537AE40D7D07F1D6CEAC79C1C`.
+- SHA-256: archive
+  `53708362200137C95E0EC4D3B2D566CDB1596877042093185A38498F9E424F82`.
+- This batch did not rebuild or inject the ASI; the package reflects the
+  previously validated Steam 2.0.4 runtime evidence.
+
+### Completed / remaining / deferred
+
+- Completed: README update, INI inclusion, versioned archive and package
+  inspection.
+- Remaining: user upload/publication to GitHub/Nexus.
+- Deferred: weapon/viewmodel FOV issue, dynamic resolution policy and support
+  validation for future game patches.
+- Not changed: historical release archive, Git history and unrelated staged
+  user work.
+
+### Patch summary
+
+Prepared the `0.3.0` release package for the unified configurable
+`STALKER2UltrawideFix.asi`, including the default INI and user-facing
+installation/compatibility documentation.
+
+### Changelog summary
+
+Version `0.3.0` packages gameplay ultrawide correction, cinematic aspect/FOV
+support and custom cinematic framing modes for the validated UE 5.5.4 / Steam
+2.0.4 environment.
+
+## 2026-09-01 — Implementation history before `STALKER2UltrawideFix`
+
+### Scope and intent
+
+This entry records the evidence and implementation path leading to the unified
+`STALKER2UltrawideFix.asi`. It is based on the repository diff from
+`HEAD 5d3d157` (`Create FUNDING.yml`), the completed task plans, Ghidra
+reports and user-supplied 2.0.4 runtime logs. The working tree contains
+intentional staged, unstaged and untracked user work; this entry does not
+normalize or remove it.
+
+### Diff inventory
+
+The read-only diff against `HEAD` contains 223 changed paths:
+
+- 48 C++ source files, including stable gameplay code, the unified source and
+  separate diagnostic/research artifacts;
+- 63 task plans and status documents;
+- 56 test build scripts;
+- 53 object/build outputs;
+- documentation and supporting project files.
+
+The large diff is a combined research/build snapshot, not a claim that every
+path belongs in the release package. The production-relevant implementation
+areas are `src/gameplay_aspect_fix.cpp`, the unified
+`src/experimental_cinematic_21_9_combined_fix_204.cpp`, its build script and
+the generated `STALKER2UltrawideFix.ini`. `src/cutscene_letterbox_fix.cpp`
+and the other diagnostic sources remain research history or isolated test
+artifacts.
+
+### Work completed before the unified implementation
+
+#### 1. Stable gameplay baseline
+
+- Established the existing gameplay aspect correction and its two-pass
+  constrained/Auto-restore contract.
+- Confirmed preservation of the player's selected FOV.
+- Replaced the original fixed-RVA assumption with a unique executable `.text`
+  signature resolver and Zydis validation of `MOVSS [RBX+0x30], XMM0`.
+- Preserved fail-closed behavior for ambiguity, decode failure, invalid
+  instruction form and hook setup failure.
+- Investigated the 21:9 startup/death-load regression. Runtime evidence showed
+  that the old 32:9-only predicate rejected the actual 21:9 aspect
+  `2.38889`.
+- Generalized the predicate to finite aspects wider than native 16:9 and kept
+  the observed source aspect through the constrained pass.
+- User runtime-tested 21:9 startup, `21:9 → 16:9 → 21:9`, death/load rebuild
+  and 32:9 regression successfully.
+
+#### 2. Early cinematic and FOV research
+
+- Reconstructed the legacy 2.0.3 cinematic transition and letterbox/FOV
+  boundaries, including the shared ENTER/EXIT topology.
+- Tested and rejected durable `+0x230`/state-based, delayed, timer, polling,
+  generic dispatcher, interpolation-shape and broad renderer approaches.
+- Used read-only runtime correlation to reject unrelated static candidates,
+  including `FUN_1422FC35A`, `FUN_1405EDA3A`, `FUN_1431FA182`,
+  `FUN_14027A5E4`, `FUN_146880C06`, `FUN_1404A4CCE`, `FUN_142D08BB0` and
+  `FUN_1476C41A6`.
+- Closed the scalar-shape ranking method after demonstrating that structural
+  FP similarity did not establish live cinematic FOV provenance.
+
+#### 3. Current-build live FOV recovery
+
+- Mapped legacy transition hub `FUN_142EE14BC` to the strong 2.0.4 descendant
+  `FUN_142EE68DA` through shared helpers, resolver topology and exact
+  direction-specific vtable slot pairs.
+- Confirmed the current ENTER boundary where authored `XMM0=90.0` reaches the
+  shared live-FOV consumer and the EXIT boundary where `[RDI+0x38]` carries the
+  native gameplay target.
+- Runtime evidence confirmed both source patterns on the same transition
+  context and thread.
+- A read-only feasibility test transformed ENTER FOV `90.0` to
+  `126.869896` for 32:9 and produced the expected wider cinematic result,
+  without durable camera-state writes.
+
+#### 4. Current-build aspect recovery
+
+- Reconstructed the legacy aspect/letterbox role and identified the exact
+  current ENTER native store equivalent of `RVA 0x6B7CB05`.
+- A read-only provenance hook confirmed the store executes with `RAX` equal to
+  the authoritative cinematic inner and the expected pre-store lifecycle
+  flags.
+- Immediate-patch feasibility replaced only the native `1.7777778` immediate
+  with runtime `3.5555556` at 5120x1440, preserving native control flow and
+  lifecycle side effects.
+- The aspect source was corrected from desktop dimensions to the runtime game
+  camera aspect after discovering that a 5120x1440 desktop can contain a
+  3440x1440 game window.
+
+#### 5. Combined cinematic integration research
+
+- Combined the already validated aspect immediate and transient live-FOV
+  boundaries with the generalized gameplay correction in isolated artifacts.
+- User runtime-tested correct 21:9 and 32:9 cinematic framing, including
+  2560x1440 with forced 32:9 letterbox framing.
+- Investigated the post-EXIT seam. Native FOV recovery and gameplay B/C were
+  both confirmed necessary; atomic same-invocation B/C scheduling did not
+  remove the visible intermediate presentation state. That coordinator path
+  was closed as a production solution and is not presented as solved.
+- Kept the native EXIT recovery, gameplay algorithm and stable gameplay source
+  contract intact.
+
+#### 6. Unified configuration and identity
+
+- Added automatic creation of `STALKER2UltrawideFix.ini`.
+- Added independent gameplay enablement and cinematic policy configuration.
+- Replaced cinematic boolean aspect control with `AspectRatio=Auto`,
+  `Native`, `16:9`, `21:9` or `32:9`, while retaining independent
+  `FovCorrection`.
+- Preserved legacy `AspectFix`/`FovFix` parsing as compatibility fallback.
+- Added startup SHA-256 logging for the loaded ASI and game executable.
+- Corrected the file reader after the first `unavailable` result; a subsequent
+  runtime log confirmed uppercase hashes and successful resolver installation.
+- Removed high-frequency coordinator recovery/suppression spam while keeping
+  state behavior unchanged.
+
+### Resulting implementation state
+
+The unified artifact now contains:
+
+- signature-resolved gameplay camera correction;
+- runtime-camera cinematic aspect policy and native immediate replacement;
+- signature-resolved cinematic ENTER/EXIT live-FOV transform;
+- coordinator isolation between cinematic lifecycle and gameplay replay;
+- automatic INI creation and policy parsing;
+- startup mod/game SHA-256 identity logging;
+- fail-closed resolver and hook setup behavior.
+
+### Validation and limits
+
+- Build validation succeeded for the unified ASI and its test output.
+- User runtime evidence confirms the unified 2.0.4 path at 21:9 and 32:9,
+  including forced cinematic framing modes and gameplay re-entry behavior.
+- The tested Steam game executable identity was
+  `2ECC5D19FE37F97E3F7F2467D652B299B5A47F010FA49FD803A49A4A6930A409`.
+- Signature resolution is more resilient than fixed RVAs but does not itself
+  guarantee a future patch. No 2.0.5 support claim is made.
+- The weapon/viewmodel FOV-after-load issue remains a separate known game-side
+  issue.
+- The brief post-cinematic presentation seam remains a known limitation of the
+  experimental cinematic integration.
+
+### Completed / remaining / deferred
+
+- Completed: evidence-led gameplay correction, cinematic boundary recovery,
+  unified 2.0.4 implementation, configuration, identity logging and supplied
+  runtime validation.
+- Remaining: final release packaging and user-facing release documentation.
+- Deferred: weapon/viewmodel FOV research, dynamic resolution policy and fresh
+  validation for any executable newer than 2.0.4.
+- Not changed by this documentation record: source behavior, build outputs,
+  Git staging and commit history.
+
+### Patch summary
+
+The unified ASI was built only after separate gameplay and cinematic boundary
+reconstruction, runtime validation, rejection of unsafe alternatives and
+resolution of the 21:9 lifecycle regression. The final implementation combines
+the validated mechanisms without the earlier desktop-aspect or fixed-RVA
+assumptions.
+
+### Changelog summary
+
+Documented the complete path from the stable gameplay resolver and bounded
+cinematic research to the configurable `STALKER2UltrawideFix` implementation,
+including evidence limits and deferred issues.
+
+## 2026-09-01 — Reconcile completed backlog and testing summary
+
+### Scope
+
+- Review every task plan in `backlog`.
+- Move only completed or explicitly closed plans into `backlog/complete/`.
+- Update `TESTING_AND_RESEARCH.md` with the confirmed 2.0.4 gameplay,
+  cinematic, configuration and compatibility status.
+- No source, build, ASI, INI or runtime behavior changes.
+
+### Changed
+
+- Moved 32 completed/closed task plans to `backlog/complete/`.
+- Added `backlog/COMPLETE_BACKLOG_AND_TESTING_SUMMARY_TASK_PLAN.md`.
+- Reworked `TESTING_AND_RESEARCH.md` to document the unified
+  `STALKER2UltrawideFix.asi`, its policy configuration, 2.0.4 evidence,
+  signature limits, known issues and release checklist.
+- Preserved active, pending, deferred and unresolved plans in `backlog/`.
+
+### Git review
+
+- Read-only status review performed after the archival move.
+- Existing staged and untracked user changes were preserved; no Git staging,
+  commit, reset or history rewrite was performed.
+- The moved plans appear as staged/deleted plus untracked archived copies where
+  the worktree already contained user-staged additions; this was not altered.
+
+### Validation and limits
+
+- Confirmed 32 exact source plans moved without destination collisions.
+- Confirmed 41 task plans now exist in `backlog/complete/` and 31 remain as
+  active or deferred plans in `backlog/`.
+- Checked the updated summary against supplied runtime evidence and existing
+  task plans.
+- `git diff --check` passed for the repository worktree.
+- No build, game launch, ASI injection or new runtime validation was performed.
+
+### Completed / remaining / deferred
+
+- Completed: backlog classification, archival of completed/closed plans and
+  testing/research summary update.
+- Remaining: active plans in `backlog/`, including unresolved projection,
+  pending signature follow-up, post-EXIT handoff classification and logging
+  cleanup runtime confirmation.
+- Deferred: weapon/viewmodel FOV research and future-patch compatibility.
+- Not runtime-validated by this documentation batch: no new implementation or
+  runtime behavior.
+
+### Patch summary
+
+Archived completed research and implementation plans and synchronized the
+project testing summary with the validated 2.0.4 state.
+
+### Changelog summary
+
+The backlog now separates completed/closed work from active research, and the
+testing summary documents the unified configurable gameplay/cinematic fix.
+
+## 2026-08-30 — Runtime-informed top-tier semantic reranking
+
+### Scope
+
+- Re-rank the retained 2.0.4 top-500 using completed runtime negatives.
+- Decompile-review the tied top tier and the `FUN_14569...` family.
+- No runtime artifact, game launch, hook, write or stable/global ASI change.
+
+### Changed
+
+- Added the reranking plan, helper and generated report.
+- Added a read-only Ghidra decompile helper and top-tier review report.
+
+### Git review
+
+- Existing uncommitted research/source/build-artifact changes were preserved.
+- Stable gameplay and global experimental ASI files were not modified.
+- Recent HEAD at review: `5d3d157 Create FUNDING.yml`.
+
+### Validation and limits
+
+- Existing 2.0.4 inventory was reused; no full executable re-analysis was run.
+- Top-500 input was deduplicated to `351` function/entry rows.
+- Top-tier decompilation ran read-only against the verified 2.0.4 program hash.
+- Static review does not establish runtime ownership.
+
+### Completed
+
+- Initial shortlist was closed and runtime-informed ranking completed.
+- Most tied candidates were deprioritized as subsystem-specific, large/generic
+  or lacking lifecycle semantics.
+- Held shortlist: `FUN_14027A5E4`, `FUN_146880C06`, and the `FUN_14569...`
+  family represented by `FUN_14569CAD2`.
+
+### Remaining / deferred
+
+- No candidate is runtime-promoted; each held candidate requires a separate
+  read-only plan before testing.
+- Native cinematic FOV transition owner remains unresolved.
+
+### Patch summary
+
+Applied runtime-informed penalties and completed semantic review of the tied
+top tier without expanding into runtime instrumentation.
+
+### Changelog summary
+
+Initial static-ranked shortlist was replaced by a smaller held shortlist based
+on subsystem and lifecycle plausibility; no production code changed.
+
+## 2026-08-30 — `FUN_1431FA182` runtime correlation gate
+
+### Scope
+
+- Run one isolated, read-only 2.0.4 runtime correlation pass for
+  `FUN_1431FA182`.
+- No game-state writes, correction logic, stable gameplay changes or global
+  experimental ASI changes.
+
+### Changed
+
+- Added the candidate-specific task plan and runtime evidence review under
+  `02-Research/Ghidra/reports`.
+
+### Git review
+
+- Existing uncommitted research/source/build-artifact changes were preserved.
+- Stable gameplay and global experimental ASI files were not modified.
+- Recent HEAD at review: `5d3d157 Create FUNDING.yml`.
+
+### Validation and limits
+
+- User-supplied runtime log shows successful installation and valid ENTER/EXIT
+  anchors on the same `inner=0x27B7E02A6C0` and thread `19768`.
+- Candidate hit count was zero over approximately `12.4 s`; no write-test was
+  performed.
+
+### Completed
+
+- `FUN_1431FA182` was rejected for the tested cinematic lifecycle.
+- The initial three-candidate runtime shortlist is exhausted.
+
+### Remaining / deferred
+
+- Native cinematic FOV transition owner remains unresolved.
+- Runtime-informed reranking of the top-500 requires a separate plan.
+
+### Patch summary
+
+Recorded a clean read-only negative runtime verdict for `FUN_1431FA182`.
+
+### Changelog summary
+
+`FUN_1431FA182` was silent during the validated cinematic lifecycle and was
+rejected without modifying production or correction code.
+
+## 2026-08-30 — `FUN_1405EDA3A` runtime correlation gate
+
+### Scope
+
+- Run one isolated, read-only 2.0.4 runtime correlation pass for the static
+  reserve candidate `FUN_1405EDA3A`.
+- No game-state writes, correction logic, stable gameplay changes or global
+  experimental ASI changes.
+
+### Changed
+
+- Added the candidate-specific task plan and runtime evidence review under
+  `02-Research/Ghidra/reports`.
+
+### Git review
+
+- Existing uncommitted research/source/build-artifact changes were preserved.
+- Stable gameplay and global experimental ASI files were not modified by this
+  pass.
+- Recent HEAD at review: `5d3d157 Create FUNDING.yml`.
+
+### Validation and limits
+
+- User-supplied runtime log shows successful installation and valid ENTER/EXIT
+  anchors on the same `inner=0x2D701A50100` and thread `7188`.
+- Candidate hit count was zero over approximately `11.55 s`; no write-test was
+  performed.
+
+### Completed
+
+- `FUN_1405EDA3A` was rejected for the tested cinematic lifecycle.
+
+### Remaining / deferred
+
+- `FUN_1431FA182` remains the next reserve candidate, pending a separate plan.
+- Native cinematic FOV transition owner remains unresolved.
+
+### Patch summary
+
+Recorded a clean read-only negative runtime verdict for `FUN_1405EDA3A`.
+
+### Changelog summary
+
+`FUN_1405EDA3A` was silent during the validated cinematic lifecycle and was
+rejected without modifying production or correction code.
+
+## 2026-08-27 — Close cinematic constrained-vs-native projection state diff research
+
+### Scope
+
+- Analyze the 2.0.3 Ghidra project on the durable E: path.
+- Compare the confirmed `16:9 / 2560x1440 / correct framing` and `32:9 / 5120x1440 / incorrect framing` cinematic states.
+- Validate only `FUN_140186BE8` as the remaining projection-like candidate.
+- No stable gameplay changes, A/B changes, runtime tracer, build or source implementation.
+
+### Changed
+
+- Added and updated `backlog/CINEMATIC_CONSTRAINED_NATIVE_PROJECTION_STATE_DIFF_TASK_PLAN.md`.
+- Added read-only Ghidra helpers under `02-Research/Ghidra/ghidra-scripts` and stored analysis logs under `02-Research/Ghidra/workspace`.
+- No Ghidra project data or stable ASI source was intentionally modified.
+
+### Git review
+
+- Canonical repository: project root.
+- Branch/HEAD: `main@179222d` (`chore: organize build artifacts and research workflow`).
+- Read-only Git review performed with an explicit per-command `safe.directory` override; global Git configuration was not changed.
+- Existing user modifications and untracked research/build artifacts remain untouched.
+
+### Validation and limits
+
+- Executable: game 2.0.3, SHA-256 `81961B7281C7CF528CE49C549CE086FCC684BD676F32FAF042BC743D939E3C69`.
+- `FUN_140280F58`, `FUN_140311CB4` and `FUN_14038E760` were rejected as graph/lighting/resource paths.
+- `FUN_1401BD890` consumes mode/flag bytes but does not read the runtime aspect field.
+- `FUN_14010C076` is a constructor/default initializer, not a transition owner.
+- `FUN_140186BE8` builds matrix-like data, but caller/data-flow evidence ties it to movable-point-light/shadow and `ViewSpace...` scene resources, not cinematic camera ownership.
+- No runtime validation or implementation was performed; this is a bounded static negative result.
+
+### Completed / remaining / deferred
+
+- Completed: Batch 1 state-family diff and the approved single-candidate ownership validation.
+- Remaining: none within the approved bounded scope.
+- Deferred: any new cinematic research requires new structural evidence and a separate approved plan.
+- Blocked: no validated cinematic projection-only or refresh intervention point was found.
+- Not runtime-validated: all conclusions in this entry are static-analysis conclusions.
+
+### Patch summary
+
+Completed a bounded 2.0.3 Ghidra ownership review and rejected the remaining projection-like candidate as unrelated scene/shadow processing.
+
+### Changelog summary
+
+Closed the constrained-vs-native cinematic projection research task as blocked without changing the stable gameplay fix.
+
+## 2026-08-27 — Reject transient/durable FOV split experiment
+
+### Scope
+
+- Approved experimental A/B test of transient cinematic Hor+ FOV versus durable camera-state FOV.
+- Determine whether cinematic framing can remain correct when `state + 0x54` receives the original source FOV.
+- Stable gameplay ASI and release behavior were out of scope.
+
+### Changed
+
+- Added a diagnostic-only split-state branch and dedicated build script under the existing experimental workflow.
+- Built Variant A and Variant B diagnostic ASIs for manual comparison.
+- Updated `backlog/CUTSCENE_TRANSIENT_DURABLE_FOV_SPLIT_TASK_PLAN.md` with the completed result.
+
+### Git review
+
+- Canonical repository: project root.
+- Branch/HEAD: `main@179222d` (`chore: organize build artifacts and research workflow`).
+- Read-only review performed; no Git state was mutated.
+- Existing diagnostic source, object files and untracked research plans remain visible in the working tree.
+
+### Validation and limits
+
+- Both diagnostic variants compiled successfully.
+- Variant B confirmed transient `126.869896` with durable `state + 0x54 = 90`.
+- Gameplay logging after the cutscene recorded `primaryFOV=90`, not `126.869896`.
+- Manual testing showed that Variant B visually resembled gameplay without `STALKER2GameplayAspectFix`: the large gameplay-visible FOV contamination was removed, but the required cinematic Hor+ framing was lost.
+- This does not identify the exact final projection consumer or provide a release-ready solution.
+
+### Completed / remaining / deferred
+
+- Completed: transient/durable split mechanism tested and rejected as final architecture.
+- Remaining: find a solution that preserves cinematic Hor+ without injecting the transformed value into gameplay-visible camera state.
+- Deferred: further implementation and projection-owner research until a new concrete direction is approved.
+- Not runtime-validated: no release build or compatibility claim was made.
+
+### Patch summary
+
+Tested and rejected a split-state FOV design: it prevents the `126.87` gameplay leak but loses the required cinematic Hor+ framing.
+
+### Changelog summary
+
+Closed the split-state experiment with causal evidence that the transformed FOV must pass through camera-state machinery for the observed cinematic framing.
+
+## 2026-08-27 — Reject cutscene FOV durable state as causal blend owner
+
+### Scope
+
+- Approved bounded static/runtime research of the established cutscene FOV state path.
+- Determine whether `state + 0x54` is consumed as an active post-cutscene blend or projection source.
+- No source behavior, ASI output, workaround, delayed replay or broad scan changes.
+
+### Changed
+
+- Updated `backlog/CUTSCENE_FOV_STATE_RUNTIME_TRACE_TASK_PLAN.md` with the final ownership-bounded result.
+- Recorded that `FUN_1431D2094` reads `state + 0x54` only for equality/update checking.
+- Recorded that the runtime-derived virtual target at executable RVA `0x20939B8` does not read `+0x54`.
+
+### Git review
+
+- Canonical repository: project root.
+- Branch/HEAD: `main@179222d` (`chore: organize build artifacts and research workflow`).
+- Read-only review performed; no Git state was mutated.
+- Existing source, object files and untracked research plans remain outside this documentation batch.
+
+### Validation and limits
+
+- Re-ran the bounded read-only Ghidra inspection against the 2.0.3 program in `Dump/STALKER2-Ghidra`.
+- Confirmed the durable `+0x54` write and the existing marker-correlated runtime state handoff evidence.
+- Confirmed no downstream blend/projection reader was established in the known state family.
+- This result does not identify the final camera handoff owner and does not validate a new implementation.
+
+### Completed / remaining / deferred
+
+- Completed: `state + 0x54` durable-state path rejected as a validated causal blend owner.
+- Remaining: determine a safer architecture for preventing transformed cinematic FOV from affecting the subsequent camera handoff.
+- Deferred: further blend-owner search, implementation and compatibility claims.
+- Not runtime-validated: no new implementation runtime test was performed in this batch.
+
+### Patch summary
+
+Closed the bounded cutscene FOV state investigation after confirming durable state handoff but finding no active downstream blend consumer.
+
+### Changelog summary
+
+Rejected the `state + 0x54` persistence path as an implementation basis; future work must use a separate, evidence-backed camera handoff design.
+
 
 ## 2026-08-26 — Trim vendored dependency material and add notices
 
@@ -344,6 +965,55 @@ Restored a factual post-change Git audit and task-log workflow for the native C+
 
 Added structured task logging for reliable patch and release-note preparation.
 
+## 2026-08-30 — `FUN_1422FC35A` runtime correlation gate
+
+### Scope
+
+- Run one isolated, read-only 2.0.4 runtime correlation pass for the highest-
+  ranked exploratory static candidate `FUN_1422FC35A`.
+- No game-state writes, correction logic, stable gameplay changes or global
+  experimental ASI changes.
+
+### Changed
+
+- Added the candidate-specific task plan and runtime evidence review under
+  `02-Research/Ghidra/reports`.
+
+### Git review
+
+- Canonical repository contains pre-existing uncommitted research/source and
+  build-artifact changes; they were preserved.
+- This pass did not modify stable gameplay or global experimental ASI files.
+- Recent HEAD at review: `5d3d157 Create FUNDING.yml`.
+
+### Validation and limits
+
+- User-supplied runtime log corresponds to the recorded 2.0.4 executable hash
+  `2ecc5d19fe37f97e3f7f2467d652b299b5a47f010fa49fd803a49a4a6930a409`.
+- The run produced `2782` hits across three candidate objects, all on the
+  ENTER thread, but candidate scalar state did not track FOV convergence.
+- No write-test was performed.
+
+### Completed
+
+- `FUN_1422FC35A` was tested under the approved runtime gate and rejected as
+  the native cinematic FOV owner.
+
+### Remaining / deferred
+
+- Secondary static candidates remain held; no automatic promotion is allowed.
+- Native FOV transition owner remains unresolved.
+
+### Patch summary
+
+Recorded the read-only runtime correlation result for the top static candidate
+without changing stable or global fix behavior.
+
+### Changelog summary
+
+Runtime evidence rejects `FUN_1422FC35A` as the current-build cinematic FOV
+owner; no production or correction code was changed.
+
 ## 2026-08-25 — Restore adapted workflow and model routing modules
 
 ### Scope
@@ -422,3 +1092,87 @@ Formalized task-plan fields, contradiction handling and batch-versus-task task-l
 ### Changelog summary
 
 Clarified agent workflow gates and task-log semantics for reliable patch preparation.
+## 2026-08-31 — Reject `FUN_1476C41A6` as legacy live-FOV equivalent
+
+### Scope
+
+- Complete the planned read-only micro-review of current-build candidate `FUN_1476C41A6`.
+- Do not build or run a runtime artifact; do not modify stable/global ASI code.
+
+### Changed
+
+- Added the single-function Ghidra inspection script under `02-Research/Ghidra/ghidra-scripts`.
+- Added `legacy-live-fov1476c41a6-micro-review-204.md` with the instruction-level verdict.
+- Marked Batch 7 complete in `LEGACY_LIVE_FOV_CONSUMPTION_RECOVERY_204_TASK_PLAN.md`.
+
+### Validation and limits
+
+- Reused the existing 2.0.4 Ghidra program read-only with `-noanalysis`.
+- Verified executable SHA-256: `2ecc5d19fe37f97e3f7f2467d652b299b5a47f010fa49fd803a49a4a6930a409`.
+- Confirmed the ranked scalar slice is sensitivity-settings/UI data, not cinematic FOV.
+- No build, game launch, injected ASI test or runtime hook validation was performed.
+
+### Completed
+
+- `FUN_1476C41A6` rejected as a current-build equivalent of the legacy live cinematic FOV consumption boundary.
+- No runtime promotion or write-test justified.
+
+### Remaining / deferred
+
+- Native current-build live cinematic FOV consumption boundary remains unresolved.
+- Remaining ranked/family candidates require a separate decision; no automatic runtime promotion was made.
+
+### Patch summary
+
+Completed the final planned micro-review candidate and recorded its settings/UI scalar lineage.
+
+### Changelog summary
+
+Rejected `FUN_1476C41A6` as unrelated sensitivity-settings code; stable gameplay and experimental global ASI remained untouched.
+## 2026-08-31 — Reconstruct legacy live-FOV callgraph boundary
+
+### Scope
+
+- Complete Batch 1 of the separate cross-version legacy callgraph/data-flow
+  reconstruction plan.
+- Use existing Ghidra programs read-only; no runtime artifact or production
+  source changes.
+
+### Changed
+
+- Added `legacy-fov-callgraph-boundary-203.md` with the exact 2.0.3
+  ENTER/EXIT scalar and callgraph neighbourhood.
+- Added `InspectLegacyWorkingFovBoundary203.java` for reproducible read-only
+  inspection.
+- Marked Batch 1 complete in `LEGACY_FOV_CALLGRAPH_DATAFLOW_RECONSTRUCTION_204_TASK_PLAN.md`.
+
+### Validation and limits
+
+- Used the existing 2.0.3 Ghidra program with `-noanalysis -readOnly`.
+- Verified executable SHA-256:
+  `81961b7281c7cf528ce49c549ce086fcc684bd676f32faf042bc743d939e3c69`.
+- Confirmed ENTER `MOVSS XMM0,[0x149EDE50C]` → `FUN_146B68976` and the EXIT
+  counterpart `MOVSS XMM0,[RDI+0x38]` → the same callee.
+- No current-build descendant was claimed; no build, game launch or runtime
+  validation was performed.
+
+### Completed
+
+- Established the portable legacy fingerprint: shared lifecycle function,
+  direction-specific scalar sources, shared XMM0 consumer, related-object
+  resolver and shared transition helper.
+
+### Remaining / deferred
+
+- Search the existing 2.0.4 program for structural/data-flow descendants.
+- No runtime promotion until a concrete current-build boundary is found.
+
+### Patch summary
+
+Recovered the legacy ENTER/EXIT live-FOV callgraph and register/data-flow
+contract from the validated 2.0.3 executable.
+
+### Changelog summary
+
+Documented the portable legacy FOV-consumption fingerprint without reusing its
+historical addresses as 2.0.4 hook targets.

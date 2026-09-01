@@ -49,6 +49,58 @@ namespace
     std::shared_ptr<spdlog::logger> g_logger;
     std::atomic<ReplayState> g_state{ReplayState::WaitingForAutomaticUpdate};
     std::atomic<std::uint32_t> g_lastCameraMode{};
+    std::atomic<std::uint64_t> g_transitionTraceSequence{0};
+#ifdef GAMEPLAY_ONE_SHOT_CINEMATIC_TRIGGER
+    std::atomic_bool g_oneShotCinematicTriggerArmed{false};
+#endif
+#ifdef COMBINED_GAMEPLAY_DIAGNOSTIC
+    std::atomic<std::uintptr_t> g_lastCameraSource{};
+    std::atomic_bool g_suppressRearmAfterManualRestore{false};
+    std::atomic_bool g_readyForOneShot{};
+    std::atomic_bool g_readyMarkerLogged{};
+    thread_local bool g_logCombinedOutputForInvocation{};
+
+    struct CombinedOutputSnapshot
+    {
+        std::uintptr_t source{};
+        std::uintptr_t output{};
+        float sourceAspect{};
+        std::uint8_t sourceFlags{};
+        float outputAspect{};
+        std::uint64_t outputField40{};
+        std::uint64_t outputField58{};
+        std::uint64_t outputField68{};
+        bool valid{};
+    };
+    thread_local CombinedOutputSnapshot g_lastCombinedOutput{};
+
+    struct ResolutionSnapshot
+    {
+        DWORD displayWidth{};
+        DWORD displayHeight{};
+        LONG windowWidth{};
+        LONG windowHeight{};
+        LONG clientWidth{};
+        LONG clientHeight{};
+        bool valid{};
+    };
+    ResolutionSnapshot g_lastResolutionSnapshot{};
+#endif
+
+    const char* ReplayStateName(ReplayState state)
+    {
+        switch (state) {
+        case ReplayState::WaitingForAutomaticUpdate: return "WaitingForAutomaticUpdate";
+        case ReplayState::AppliedConstrainPass: return "AppliedConstrainPass";
+        case ReplayState::Complete: return "Complete";
+        }
+        return "Unknown";
+    }
+
+    bool IsUltrawideAspect(float aspect)
+    {
+        return std::isfinite(aspect) && aspect > kNativeAspect + 0.001f;
+    }
 
     template <typename... Args>
     void Log(Args&&... args)
@@ -89,67 +141,326 @@ namespace
         return true;
     }
 
-    void LogCameraModeChange(std::uintptr_t source, std::uintptr_t output, float primaryFov,
+    bool LogCameraModeChange(std::uintptr_t source, std::uintptr_t output, float primaryFov,
         float aspect, std::uint8_t flags)
     {
         float secondaryFov = 0.0f;
         float outputFov = 0.0f;
         float outputAspect = 0.0f;
+        float rawSourceAspect = 0.0f;
+        std::uint8_t rawSourceFlags = 0;
         std::uint8_t selector = 0;
         SafeRead(source + 0x234, secondaryFov);
+        SafeRead(source + kAspectOffset, rawSourceAspect);
+        SafeRead(source + kFlagsOffset, rawSourceFlags);
         SafeRead(source + 0x262, selector);
         SafeRead(output + 0x30, outputFov);
         SafeRead(output + 0x5C, outputAspect);
+
+#ifdef COMBINED_GAMEPLAY_DIAGNOSTIC
+        std::uint64_t outputField40 = 0;
+        std::uint64_t outputField58 = 0;
+        std::uint64_t outputField68 = 0;
+        if (!SafeRead(output + 0x40, outputField40) || !SafeRead(output + 0x58, outputField58) ||
+            !SafeRead(output + 0x68, outputField68))
+            return false;
+        const CombinedOutputSnapshot snapshot{
+            source, output, aspect, flags, outputAspect,
+            outputField40, outputField58, outputField68, true };
+        const bool outputChanged = !g_lastCombinedOutput.valid ||
+            snapshot.source != g_lastCombinedOutput.source ||
+            snapshot.output != g_lastCombinedOutput.output ||
+            snapshot.sourceAspect != g_lastCombinedOutput.sourceAspect ||
+            snapshot.sourceFlags != g_lastCombinedOutput.sourceFlags ||
+            snapshot.outputAspect != g_lastCombinedOutput.outputAspect ||
+            snapshot.outputField58 != g_lastCombinedOutput.outputField58;
+        g_lastCombinedOutput = snapshot;
+#else
+        const bool outputChanged = false;
+#endif
 
         std::uint32_t aspectBits{};
         std::memcpy(&aspectBits, &aspect, sizeof(aspectBits));
         const std::uint32_t mode = aspectBits ^ (static_cast<std::uint32_t>(flags) << 1) ^
             (static_cast<std::uint32_t>(selector) << 9);
-        if (g_lastCameraMode.exchange(mode, std::memory_order_relaxed) == mode)
-            return;
+        const bool sourceModeChanged = g_lastCameraMode.exchange(mode, std::memory_order_relaxed) != mode;
+#ifdef COMBINED_GAMEPLAY_DIAGNOSTIC
+        g_logCombinedOutputForInvocation = sourceModeChanged || outputChanged;
+        if (!g_logCombinedOutputForInvocation)
+            return false;
+#else
+        if (!sourceModeChanged)
+            return false;
+#endif
 
-        Log("Camera mode: primaryFOV=", primaryFov, " secondaryFOV=", secondaryFov,
+        Log("Camera mode: source=0x", std::hex, source, std::dec,
+            " rawSourceAspect=", rawSourceAspect, " rawSourceFlags=0x", std::hex,
+            static_cast<int>(rawSourceFlags), std::dec,
+            " primaryFOV=", primaryFov, " secondaryFOV=", secondaryFov,
             " aspect=", aspect, " flags=0x", std::hex, static_cast<int>(flags),
             " selector=0x", static_cast<int>(selector), std::dec,
             " outputFOV(before)=", outputFov, " outputAspect(before)=", outputAspect, ".");
+#ifdef COMBINED_GAMEPLAY_DIAGNOSTIC
+        Log("Combined output PRE: source=0x", std::hex, source, " output=0x", output, std::dec,
+            " outputFov=", outputFov, " outputAspect=", outputAspect,
+            " output+0x40=0x", std::hex, outputField40,
+            " output+0x58=0x", outputField58, " output+0x68=0x", outputField68, std::dec, ".");
+#endif
+        return true;
     }
+
+#ifdef GAMEPLAY_ONE_SHOT_CINEMATIC_TRIGGER
+    bool WriteFlagsOnly(std::uintptr_t source, std::uint8_t flags)
+    {
+        if (!IsWritable(source + kFlagsOffset, sizeof(flags))) return false;
+        std::memcpy(reinterpret_cast<void*>(source + kFlagsOffset), &flags, sizeof(flags));
+        return true;
+    }
+
+    DWORD WINAPI OneShotTriggerLoop(void*)
+    {
+        bool previousF7 = false;
+#ifdef COMBINED_GAMEPLAY_DIAGNOSTIC
+        bool previousF6 = false;
+        bool previousF8 = false;
+        bool previousF9 = false;
+#endif
+        while (true) {
+#ifdef COMBINED_GAMEPLAY_DIAGNOSTIC
+            const bool f6 = (GetAsyncKeyState(VK_F6) & 0x8000) != 0;
+#endif
+            const bool f7 = (GetAsyncKeyState(VK_F7) & 0x8000) != 0;
+#ifdef COMBINED_GAMEPLAY_DIAGNOSTIC
+            const bool f8 = (GetAsyncKeyState(VK_F8) & 0x8000) != 0;
+            const bool f9 = (GetAsyncKeyState(VK_F9) & 0x8000) != 0;
+            if (f6 && !previousF6)
+                Log("Combined diagnostic marker: native-wrong cinematic state.");
+#endif
+            if (f7 && !previousF7) {
+                if (g_readyForOneShot.load(std::memory_order_acquire)) {
+                    g_oneShotCinematicTriggerArmed.store(true, std::memory_order_release);
+                    Log("Diagnostic one-shot cinematic trigger armed from validated READY state.");
+                } else {
+                    Log("Diagnostic F7 refused: validated 32:9/0x5 Waiting state is not ready.");
+                }
+            }
+#ifdef COMBINED_GAMEPLAY_DIAGNOSTIC
+            if (f8 && !previousF8) {
+                const auto source = g_lastCameraSource.load(std::memory_order_acquire);
+                float currentAspect = 0.0f;
+                DEVMODE display{ .dmSize = sizeof(DEVMODE) };
+                const bool displayReady = EnumDisplaySettings(nullptr, ENUM_CURRENT_SETTINGS, &display) && display.dmPelsHeight != 0;
+                const float displayAspect = displayReady
+                    ? static_cast<float>(display.dmPelsWidth) / static_cast<float>(display.dmPelsHeight) : 0.0f;
+                const bool applied = source && displayReady &&
+                    g_state.load(std::memory_order_acquire) == ReplayState::Complete &&
+                    SafeRead(source + kAspectOffset, currentAspect) &&
+                    std::fabs(currentAspect - kNativeAspect) <= 0.001f &&
+                    IsWritable(source + kAspectOffset, sizeof(displayAspect));
+                if (applied) {
+                    std::memcpy(reinterpret_cast<void*>(source + kAspectOffset), &displayAspect, sizeof(displayAspect));
+                    g_suppressRearmAfterManualRestore.store(true, std::memory_order_release);
+                    Log("Combined diagnostic F8: native aspect restore source=0x", std::hex, source,
+                        std::dec, " aspect=", currentAspect, " -> ", displayAspect,
+                        " flags preserved.");
+                } else {
+                    Log("Combined diagnostic F8 refused: Complete + constrained 16:9 state was not confirmed.");
+                }
+            }
+            if (f9 && !previousF9)
+                Log("Combined diagnostic marker: observation window.");
+            previousF6 = f6;
+#endif
+            previousF7 = f7;
+#ifdef COMBINED_GAMEPLAY_DIAGNOSTIC
+            previousF8 = f8;
+            previousF9 = f9;
+#endif
+            Sleep(10);
+        }
+    }
+#endif
+
+    void LogTransitionSnapshot(const char* stage, std::uint64_t sequence, std::uintptr_t source)
+    {
+        float aspect = 0.0f;
+        std::uint8_t flags = 0;
+        if (!SafeRead(source + kAspectOffset, aspect) || !SafeRead(source + kFlagsOffset, flags)) {
+            Log("Gameplay transition seq=", sequence, " stage=", stage,
+                " source=0x", std::hex, source, std::dec, " readable=false");
+            return;
+        }
+
+        Log("Gameplay transition seq=", sequence, " stage=", stage,
+            " source=0x", std::hex, source, std::dec,
+            " aspect=", aspect, " flags=0x", std::hex, static_cast<int>(flags), std::dec,
+            " transitionState=", ReplayStateName(g_state.load(std::memory_order_relaxed)), ".");
+    }
+
+#ifdef COMBINED_GAMEPLAY_DIAGNOSTIC
+    BOOL CALLBACK FindCurrentProcessWindow(HWND window, LPARAM parameter)
+    {
+        DWORD processId = 0;
+        GetWindowThreadProcessId(window, &processId);
+        if (processId == GetCurrentProcessId() && IsWindowVisible(window) && GetWindow(window, GW_OWNER) == nullptr) {
+            *reinterpret_cast<HWND*>(parameter) = window;
+            return FALSE;
+        }
+        return TRUE;
+    }
+
+    void LogResolutionChange()
+    {
+        DEVMODE display{ .dmSize = sizeof(DEVMODE) };
+        const bool displayReady = EnumDisplaySettings(nullptr, ENUM_CURRENT_SETTINGS, &display) != FALSE;
+        HWND window = nullptr;
+        EnumWindows(FindCurrentProcessWindow, reinterpret_cast<LPARAM>(&window));
+        RECT windowRect{};
+        RECT clientRect{};
+        const bool windowReady = window && GetWindowRect(window, &windowRect) && GetClientRect(window, &clientRect);
+        ResolutionSnapshot current{
+            displayReady ? display.dmPelsWidth : 0,
+            displayReady ? display.dmPelsHeight : 0,
+            windowReady ? windowRect.right - windowRect.left : 0,
+            windowReady ? windowRect.bottom - windowRect.top : 0,
+            windowReady ? clientRect.right - clientRect.left : 0,
+            windowReady ? clientRect.bottom - clientRect.top : 0,
+            displayReady || windowReady };
+        if (!current.valid || (g_lastResolutionSnapshot.valid &&
+            current.displayWidth == g_lastResolutionSnapshot.displayWidth &&
+            current.displayHeight == g_lastResolutionSnapshot.displayHeight &&
+            current.windowWidth == g_lastResolutionSnapshot.windowWidth &&
+            current.windowHeight == g_lastResolutionSnapshot.windowHeight &&
+            current.clientWidth == g_lastResolutionSnapshot.clientWidth &&
+            current.clientHeight == g_lastResolutionSnapshot.clientHeight))
+            return;
+
+        g_lastResolutionSnapshot = current;
+        Log("Resolution observation: display=", current.displayWidth, "x", current.displayHeight,
+            " window=", current.windowWidth, "x", current.windowHeight,
+            " client=", current.clientWidth, "x", current.clientHeight,
+            " source=Win32 display/window bounds; engine render resolution not established.");
+    }
+
+    DWORD WINAPI ResolutionMonitorLoop(void*)
+    {
+        while (true) {
+            LogResolutionChange();
+            Sleep(250);
+        }
+    }
+
+    void LogCombinedOutputPost(std::uint64_t sequence, std::uintptr_t source, std::uintptr_t output)
+    {
+        float outputFov = 0.0f;
+        float outputAspect = 0.0f;
+        std::uint64_t outputField40 = 0;
+        std::uint64_t outputField58 = 0;
+        std::uint64_t outputField68 = 0;
+        if (!SafeRead(output + 0x30, outputFov) || !SafeRead(output + 0x5C, outputAspect) ||
+            !SafeRead(output + 0x40, outputField40) || !SafeRead(output + 0x58, outputField58) ||
+            !SafeRead(output + 0x68, outputField68)) {
+            Log("Combined output POST seq=", sequence, " read-refused.");
+            return;
+        }
+        Log("Combined output POST seq=", sequence, ": source=0x", std::hex, source,
+            " output=0x", output, std::dec, " outputFov=", outputFov,
+            " outputAspect=", outputAspect, " output+0x40=0x", std::hex, outputField40,
+            " output+0x58=0x", outputField58, " output+0x68=0x", outputField68, std::dec, ".");
+    }
+#endif
 
     void ReplayManualTransition(SafetyHookContext& context)
     {
         const auto source = context.rsi;
+#ifdef COMBINED_GAMEPLAY_DIAGNOSTIC
+        g_lastCameraSource.store(source, std::memory_order_release);
+#endif
         const float fov = context.xmm0.f32[0];
         float aspect = 0.0f;
         std::uint8_t flags = 0;
         if (!SafeRead(source + kAspectOffset, aspect) || !SafeRead(source + kFlagsOffset, flags)) return;
-        LogCameraModeChange(source, context.rbx, fov, aspect, flags);
+#ifdef GAMEPLAY_ONE_SHOT_CINEMATIC_TRIGGER
+        if (g_oneShotCinematicTriggerArmed.load(std::memory_order_acquire) &&
+            g_state.load(std::memory_order_relaxed) == ReplayState::WaitingForAutomaticUpdate &&
+            std::fabs(aspect - kWideAspect) <= 0.001f && flags == 0x5) {
+            if (WriteFlagsOnly(source, 0x4)) {
+                g_oneShotCinematicTriggerArmed.store(false, std::memory_order_release);
+#ifdef COMBINED_GAMEPLAY_DIAGNOSTIC
+                g_readyForOneShot.store(false, std::memory_order_release);
+#endif
+                flags = 0x4;
+                Log("Diagnostic one-shot cinematic trigger consumed at camera-writer boundary: source=0x",
+                    std::hex, source, std::dec, " aspect=", aspect, " flags=0x5 -> 0x4.");
+            } else {
+                Log("Diagnostic one-shot cinematic trigger refused: flags field was not writable.");
+            }
+        }
+#endif
+#ifdef COMBINED_GAMEPLAY_DIAGNOSTIC
+        const auto currentState = g_state.load(std::memory_order_acquire);
+        const bool ready = currentState == ReplayState::WaitingForAutomaticUpdate &&
+            std::fabs(aspect - kWideAspect) <= 0.001f && flags == 0x5;
+        g_readyForOneShot.store(ready, std::memory_order_release);
+        if (ready && !g_readyMarkerLogged.exchange(true, std::memory_order_acq_rel))
+            Log("Combined diagnostic READY FOR F7: source=0x", std::hex, source,
+                std::dec, " aspect=", aspect, " flags=0x5 transitionState=WaitingForAutomaticUpdate.");
+        if (!ready)
+            g_readyMarkerLogged.store(false, std::memory_order_release);
+#endif
+        const bool modeChanged = LogCameraModeChange(source, context.rbx, fov, aspect, flags);
+        const auto traceSequence = modeChanged
+            ? g_transitionTraceSequence.fetch_add(1, std::memory_order_relaxed) + 1
+            : 0;
+        if (modeChanged) LogTransitionSnapshot("PRE", traceSequence, source);
+        const auto logPost = [&]() {
+            if (modeChanged) LogTransitionSnapshot("POST", traceSequence, source);
+#ifdef COMBINED_GAMEPLAY_DIAGNOSTIC
+            if (modeChanged && g_logCombinedOutputForInvocation)
+                LogCombinedOutputPost(traceSequence, source, context.rbx);
+#endif
+        };
 
         if (std::fabs(aspect - kCinemaAspect) <= 0.001f && flags == 0x5) {
             // Preserve constrained aspect ratio for a real 21:9 output. The FOV source
             // is already correct; only the camera aspect state needs normalization.
             if (WriteAspectAndFlags(source, kNativeAspect, 0x5))
                 Log("Normalized 21:9 camera aspect while preserving constrained aspect ratio.");
+            logPost();
             return;
         }
 
         auto state = g_state.load(std::memory_order_relaxed);
-        if (state == ReplayState::Complete && std::fabs(aspect - kWideAspect) <= 0.001f && flags == 0x4) {
+        if (state == ReplayState::Complete && IsUltrawideAspect(aspect) && flags == 0x4) {
             // Cutscenes can rebuild the gameplay camera and restore the same broken
             // Auto state seen during startup. Arm the proven two-pass transition again.
-            g_state.store(ReplayState::WaitingForAutomaticUpdate, std::memory_order_relaxed);
-            state = ReplayState::WaitingForAutomaticUpdate;
-            Log("Gameplay camera was rebuilt; re-arming aspect transition.");
+#ifdef COMBINED_GAMEPLAY_DIAGNOSTIC
+            if (g_suppressRearmAfterManualRestore.exchange(false, std::memory_order_acq_rel)) {
+                Log("Combined diagnostic: manual native-aspect restore observed; automatic re-arm suppressed.");
+            } else {
+#endif
+                g_state.store(ReplayState::WaitingForAutomaticUpdate, std::memory_order_relaxed);
+                state = ReplayState::WaitingForAutomaticUpdate;
+                Log("Gameplay camera was rebuilt; re-arming aspect transition.");
+#ifdef COMBINED_GAMEPLAY_DIAGNOSTIC
+            }
+#endif
         }
 
         if (state == ReplayState::WaitingForAutomaticUpdate) {
             // The game has performed its own startup update. Recreate the observed
             // temporary constrained pass that occurs when the user applies 16:9.
-            if (std::fabs(aspect - kWideAspect) > 0.001f || flags != 0x4) return;
-            if (WriteAspectAndFlags(source, kWideAspect, 0x5)) {
+            if (!IsUltrawideAspect(aspect) || flags != 0x4) {
+                logPost();
+                return;
+            }
+            if (WriteAspectAndFlags(source, aspect, 0x5)) {
                 g_state.store(ReplayState::AppliedConstrainPass, std::memory_order_relaxed);
-                Log("Replayed constrained pass: fov=", fov, " aspect=", kWideAspect, " flags=0x5.");
+                Log("Replayed constrained pass: fov=", fov, " aspect=", aspect, " flags=0x5.");
             } else {
                 Log("Replay refused: constrained-pass fields were not writable.");
             }
+            logPost();
             return;
         }
 
@@ -162,6 +473,7 @@ namespace
                 Log("Replay refused: Auto-restore fields were not writable.");
             }
         }
+        logPost();
     }
 
     bool VerifyExecutableAndInstruction()
@@ -246,6 +558,18 @@ namespace
             Log("Installing validated gameplay hook.");
             g_hook = safetyhook::create_mid(g_fovWriteAddress, ReplayManualTransition);
             Log("Validated gameplay hook installed: ", static_cast<bool>(g_hook), ".");
+#ifdef GAMEPLAY_ONE_SHOT_CINEMATIC_TRIGGER
+            const auto triggerThread = CreateThread(nullptr, 0, OneShotTriggerLoop, nullptr, 0, nullptr);
+            if (!triggerThread) throw std::runtime_error("one-shot trigger thread could not start");
+            CloseHandle(triggerThread);
+            Log("Diagnostic one-shot trigger enabled: press F7 to arm; no timer or repeated flag write is used.");
+#ifdef COMBINED_GAMEPLAY_DIAGNOSTIC
+            const auto resolutionThread = CreateThread(nullptr, 0, ResolutionMonitorLoop, nullptr, 0, nullptr);
+            if (!resolutionThread) throw std::runtime_error("resolution monitor thread could not start");
+            CloseHandle(resolutionThread);
+            Log("Combined diagnostic resolution monitor enabled: display/window/client changes are logged automatically.");
+#endif
+#endif
         } catch (const std::exception& exception) {
             Log("Gameplay hook setup failed safely: ", exception.what());
         } catch (...) {
