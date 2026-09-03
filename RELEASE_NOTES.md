@@ -1,8 +1,8 @@
-# Release Notes — 0.3.0
+# Release Notes — 0.5.0
 
 ## STALKER2UltrawideFix.asi
 
-Version 0.3.0 replaces the gameplay-only `STALKER2GameplayAspectFix.asi` with one unified configurable ASI for gameplay, cinematics and custom cinematic framing.
+Version 0.5.0 extends the unified configurable ASI with FOV-aware dialogue zoom control.
 
 ## Included
 
@@ -15,6 +15,11 @@ Version 0.3.0 replaces the gameplay-only `STALKER2GameplayAspectFix.asi` with on
 - Automatic creation of `STALKER2UltrawideFix.ini` with safe defaults.
 - Startup SHA-256 logging for the loaded ASI and game executable.
 - Guarded signature resolution for gameplay and cinematic boundaries, with fail-closed behavior when signatures or instruction validation do not match.
+- Dialogue zoom modes: `Native`, `Adaptive`, `Reduced` and `Disabled`.
+- `Adaptive` preserves native optical zoom strength relative to the current gameplay FOV; `Reduced` applies half of that optical effect.
+- Dialogue transitions preserve native timing, including smooth EXIT recovery back to the actual gameplay FOV baseline.
+- Optional F9/F10 hotkeys select the policy for the next cinematic or dialogue; hotkeys are disabled by default.
+- Dialogue resolver contract statically validated across Steam builds 2.0.2, 2.0.3 and 2.0.4; runtime validation is limited to 2.0.4.
 
 ## Configuration
 
@@ -25,6 +30,29 @@ Enabled=true
 [Cinematics]
 ; Auto, Native, 16:9, 21:9, 32:9
 AspectRatio=Auto
+
+[Dialogue]
+; Native   - keep the game's original dialogue zoom, currently targeting 70°.
+; Adaptive - preserve the native optical zoom strength relative to the current gameplay FOV.
+; Reduced  - apply half of the Adaptive optical zoom strength.
+; Disabled - keep the current gameplay FOV during dialogue.
+Zoom=Reduced
+
+[Hotkeys]
+; Optional runtime controls for quickly testing different settings without restarting the game.
+; Intended mainly for comparing modes and finding a preferred configuration; disable for normal use.
+; Supported keys: F1-F12, 0-9 and A-Z.
+Enabled=false
+
+; Key used to cycle the cinematic mode for the next cinematic.
+; Auto -> Native -> 16:9 -> 21:9 -> 32:9 -> Auto.
+; Does not affect a cinematic that is already playing.
+CinematicCycle=F9
+
+; Key used to cycle the dialogue zoom mode for the next dialogue.
+; Native -> Adaptive -> Reduced -> Disabled -> Native.
+; Does not affect a dialogue that is already in progress.
+DialogueCycle=F10
 ```
 
 `Auto` uses the runtime camera aspect and matching Hor+ FOV. `Native` bypasses the cinematic aspect and FOV overrides. Forced ratios provide custom framing and matching FOV independently of the display; for example, `32:9` on a 16:9 display produces letterboxed cinematics.
@@ -39,9 +67,8 @@ AspectRatio=Auto
 
 ## Known limitations
 
-- A brief post-cinematic projection/FOV handoff transition may still be visible in some scenarios.
-- Weapon/viewmodel FOV after loading on 21:9 is a separate game-side issue and is not addressed by this release.
-- Resolution changes during a running session are not part of the validated scope; restart the game after changing resolution.
+- Weapon/viewmodel FOV behavior is a separate game-side area and is not modified by the dialogue zoom feature.
+- `AspectRatio=Auto` was validated across runtime resolution changes during the same session. Restart the game after manually changing the configuration file.
 - Do not load `STALKER2GameplayAspectFix.asi` together with this unified ASI.
 
 ## Upgrade notes

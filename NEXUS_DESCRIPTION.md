@@ -1,6 +1,6 @@
 # STALKER 2 Ultrawide Fix for UE 5.5.4 — Gameplay, Cinematics & Custom Framing
 
-## Version 0.3.0
+## Version 0.5.0
 
 **Defender notice:** Microsoft reviewed the release binary and classified it as
 **“Not malware.”** If an old detection remains, update Microsoft Defender
@@ -21,6 +21,16 @@ ambiguous or incompatible, the ASI refuses to install that path safely.
 
 Custom framing also allows users to deliberately choose 16:9, 21:9 or 32:9
 cinematic presentation independently of their display aspect ratio.
+
+Version 0.5.0 also provides FOV-aware dialogue zoom modes: `Native`,
+`Adaptive`, `Reduced` and `Disabled`. Optional runtime hotkeys can select the
+policy for the next cinematic or dialogue and are disabled by default.
+
+`Native` keeps the game's original dialogue zoom, currently targeting `70°`.
+`Adaptive` preserves that native optical zoom strength relative to the actual
+gameplay FOV. `Reduced` applies half of the Adaptive optical effect, while
+`Disabled` keeps the gameplay FOV during dialogue. The native transition timing
+is preserved, including smooth recovery after dialogue EXIT.
 
 ## Support development
 
@@ -49,6 +59,10 @@ Thank you for your support.
 - Adds custom cinematic framing modes: `Auto`, `Native`, `16:9`, `21:9` and
   `32:9`.
 - Allows 16:9 users to preview wider cinematic framing with letterbox bars.
+- Adds FOV-aware dialogue zoom modes: `Native`, `Adaptive`, `Reduced` and
+  `Disabled`, with lifecycle-aware ENTER/EXIT transitions.
+- Optional runtime hotkeys select the policy for the next cinematic or dialogue
+  and are disabled by default.
 - Creates the configuration file automatically when it is missing.
 - Writes the loaded mod and game executable SHA-256 values to the startup log
   for easier support and version verification.
@@ -65,6 +79,29 @@ Enabled=true
 [Cinematics]
 ; Auto, Native, 16:9, 21:9, 32:9
 AspectRatio=Auto
+
+[Dialogue]
+; Native   - keep the game's original dialogue zoom, currently targeting 70°.
+; Adaptive - preserve the native optical zoom strength relative to the current gameplay FOV.
+; Reduced  - apply half of the Adaptive optical zoom strength.
+; Disabled - keep the current gameplay FOV during dialogue.
+Zoom=Reduced
+
+[Hotkeys]
+; Optional runtime controls for quickly testing different settings without restarting the game.
+; Intended mainly for comparing modes and finding a preferred configuration; disable for normal use.
+; Supported keys: F1-F12, 0-9 and A-Z.
+Enabled=false
+
+; Key used to cycle the cinematic mode for the next cinematic.
+; Auto -> Native -> 16:9 -> 21:9 -> 32:9 -> Auto.
+; Does not affect a cinematic that is already playing.
+CinematicCycle=F9
+
+; Key used to cycle the dialogue zoom mode for the next dialogue.
+; Native -> Adaptive -> Reduced -> Disabled -> Native.
+; Does not affect a dialogue that is already in progress.
+DialogueCycle=F10
 ```
 
 `Gameplay.Enabled=false` disables the gameplay aspect correction while leaving
@@ -81,7 +118,8 @@ physical display:
 
 For example, forcing `32:9` on a 16:9 display produces a wider cinematic frame
 with black bars above and below and matching FOV. Restart the game after
-changing the configuration.
+manually editing the INI file. Runtime hotkey selections do not require a
+restart and apply to the next corresponding cinematic or dialogue.
 
 ## Requirements
 
@@ -120,6 +158,12 @@ Tested on:
 - 21:9 and 32:9 cinematic framing with Hor+ FOV.
 - Forced 32:9 cinematic framing at `2560x1440`, producing the expected
   letterbox presentation.
+- Dialogue zoom `Native`, `Adaptive`, `Reduced` and `Disabled` on Steam 2.0.4,
+  including sequential dialogue cycles and cinematic-to-dialogue isolation.
+- `Auto` cinematic aspect updates after changing resolution during the same
+  session.
+- Dialogue resolver portability was statically validated on Steam 2.0.2, 2.0.3
+  and 2.0.4. This is not runtime compatibility proof for the older builds.
 
 ## Known Issues
 
@@ -131,17 +175,36 @@ Tested on:
   a cinematic, after loading, or after a camera rebuild. It may remain wrong
   until the player aims down sights or opens a menu, which refreshes the game's
   viewmodel state. This is a separate game-side issue.
-- Resolution changes during a running session are not part of the validated
-  scope. Restart the game after changing resolution.
 - Signature-based resolution improves resilience to address relocation but does
   not guarantee compatibility with future patches. Game updates that only
   relocate validated code may continue to work without a mod update, while
   structural changes may require new signatures. The ASI fails safely when
   validation does not pass.
+- Manual INI changes require a game restart. Runtime hotkey selections do not
+  require a restart and apply to the next corresponding cinematic or dialogue.
 - Do not combine this release with the old gameplay ASI or other experimental
   cinematic ASI files.
 
 ## Changelog
+
+### 0.5.0
+
+- Added FOV-aware dialogue zoom modes: `Native`, `Adaptive`, `Reduced` and
+  `Disabled`.
+- `Adaptive` preserves the game's native optical zoom strength relative to the
+  current gameplay FOV; `Reduced` applies half of that optical effect.
+- Added smooth dialogue EXIT recovery and cinematic/dialogue state isolation.
+- Added optional runtime policy hotkeys with configurable `F1-F12`, `0-9` and
+  `A-Z` bindings; hotkeys are disabled by default and affect the next applicable
+  lifecycle.
+- Added INI template migration/synchronization while preserving user values.
+
+### Research references
+
+- [WIDEBOY Fixes by BigChenga](https://www.nexusmods.com/stalker2heartofchornobyl/mods/2337)
+  was used as a research reference for identifying dialogue/camera FOV
+  behavior. This mod's dialogue implementation was independently reverse
+  engineered and runtime validated.
 
 ### 0.3.0
 

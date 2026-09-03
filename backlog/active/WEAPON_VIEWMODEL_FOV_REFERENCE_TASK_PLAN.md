@@ -1,6 +1,6 @@
 # Weapon/Viewmodel FOV Reference Analysis
 
-Status: In progress — Batch 1 reference analysis is complete; independent runtime comparison of the new BigChenga build remains pending.
+Status: In progress — Batch 1 reference analysis is complete; independent runtime comparison of the WIDEBOY reference build and current 2.0.4 mapping remain pending.
 
 ## Objective
 
@@ -8,12 +8,17 @@ Analyse the unreleased BigChenga reference build for weapon/viewmodel FOV behavi
 
 ## Established evidence and current state
 
-- Reference source: `C:\Users\enton\Downloads\elhait.zip`, latest FWS profile `Stalker2.lua`.
+- Reference source: `C:\Users\enton\Downloads\WIDEBOY Fixes 2337 7 2026-08-31T13-13Z NfXmIXiND.zip`, FWS profile `Stalker2.lua`.
 - The reference profile identifies `UCameraComponent +0x234` as `FirstPersonFieldOfView`, `+0x230` as world FOV, `+0x254` as aspect and `+0x262 bit 2` as the first-person-FOV enable flag.
 - Its camera signature resolves the same gameplay camera hook family / camera-writer region used by the stable gameplay aspect path; exact ownership equivalence with the current native implementation remains a separate validation point. Its added policy writes `+0x234` and enables the first-person flag.
 - Its weapon-FOV policy derives first-person FOV from the live world FOV and a learned runtime baseline; it does not use a fixed FOV multiplier or a fixed `80/90` input.
 - Its weapon/equipment policy discovers the player mesh through assignment ancestry and writes `+0x265` for the body, held item and attachments. This is separate from cinematic projection and requires independent ownership/runtime validation.
 - The archive also contains an older UE4SS implementation that is explicitly resource-heavy and is reference evidence only.
+- The reference exposes a `Viewmodel / Arms FOV` slider with a default value of `110`, stores that value in `ViewmodelFOV`, and writes it into the camera cave's first-person FOV path.
+- Its camera cave reads world FOV from `+0x230`, derives an adaptive first-person value and writes the result to `+0x234`; the reference does not simply replay a fixed value after ADS.
+- Its ADS anchors are separate signatures for ADS-in (`F3 0F 10 40 4C ...`) and ADS-out (`F3 0F 10 40 50 ...`). In the shown implementation they record transitions; they do not themselves prove that native ADS is the refresh owner.
+- Its mesh-assignment path uses `RSI`, `[RSI+0x20]` and bounded ancestor walks to reacquire body/weapon descendants. `+0x265` is the first-person primitive-type field, not the weapon FOV field.
+- Its `MarkRenderStateDirty` anchor is resolved by signature and called through a guarded thunk for late arms/viewmodel render-state recreation. The reference documents this as necessary after mesh rebuilds, but this is not yet mapped to the post-cinematic symptom in the current 2.0.4 build.
 
 ## Approved scope
 
@@ -40,9 +45,9 @@ Validation: archive contents, source text and comparison with current project ev
 
 Result:
 
-- `confirmed reference structure`: same gameplay camera hook family, `+0x234` first-person FOV, `+0x262 bit 2` enable flag and runtime world-FOV input.
+- `confirmed reference structure`: same gameplay camera hook family, `+0x234` first-person FOV, `+0x262 bit 2` enable flag, runtime world-FOV input, separate ADS anchors, mesh reacquisition and guarded render-state refresh.
 - `likely design`: adaptive first-person FOV derived from live world zoom and a learned baseline, avoiding ADS timing replay.
-- `unresolved`: whether the assignment ancestry reliably identifies every player weapon/viewmodel object in the current runtime and whether the camera policy remains stable across rebuilds.
+- `unresolved`: whether the field map and signatures are equivalent in the current 2.0.4 executable, whether native ADS/menu refresh changes the game-owned value or only causes the reference to reapply its stored value, and whether the post-cinematic stale state is camera-field, primitive-state or render-state related.
 - `rejected for implementation`: the resource-heavy UE4SS polling script and any direct 1:1 Lua port into the stable ASI.
 
 ### Batch 2 — Optional manual reference comparison

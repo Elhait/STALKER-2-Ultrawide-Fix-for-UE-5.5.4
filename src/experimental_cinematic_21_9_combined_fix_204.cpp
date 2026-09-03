@@ -16,6 +16,7 @@
 #include <fstream>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -57,6 +58,12 @@ namespace
     constexpr std::size_t kCinematicImmediateOffset = 6;
     constexpr std::size_t kCinematicStoreInstructionLength = 10;
     constexpr float kRecoveryEpsilon = 0.01f;
+    constexpr char kDialogueBoundarySignature[] =
+        "48 8B 0A 48 8B 01 0F 28 CE FF 90 08 06 00 00 "
+        "0F 2E 76 2C 75 02 7B 1A";
+    constexpr std::size_t kDialogueBoundaryHookOffset = 9;
+    constexpr float kDialogueRecoveryEpsilon = 1.0f;
+    constexpr float kDialogueTransformEpsilon = 0.01f;
 
     // These signatures describe the 2.0.3 -> 2.0.4 transition topology, not
     // fixed addresses. Relative call displacements and the ENTER RIP-relative
@@ -85,11 +92,18 @@ namespace
 
     enum class CinematicAspectPolicy : std::uint32_t { Auto, Native, Forced16x9, Forced21x9, Forced32x9 };
 
+    enum class DialogueZoomPolicy : std::uint32_t { Native, Adaptive, Reduced, Disabled };
+    enum class DialoguePhase : std::uint32_t { Inactive, Active, Exiting };
+
     struct FeatureConfig
     {
         bool gameplayEnabled{true};
         CinematicAspectPolicy cinematicAspectPolicy{CinematicAspectPolicy::Auto};
         bool cinematicAspectPolicyExplicit{};
+        DialogueZoomPolicy dialogueZoomPolicy{DialogueZoomPolicy::Reduced};
+    bool hotkeysEnabled{false};
+        int cinematicCycleKey{VK_F9};
+        int dialogueCycleKey{VK_F10};
     };
 
     HMODULE g_module{};
@@ -98,6 +112,9 @@ namespace
     SafetyHookMid g_hook;
     std::shared_ptr<spdlog::logger> g_logger;
     FeatureConfig g_config{};
+    std::atomic<CinematicAspectPolicy> g_runtimeCinematicPolicy{CinematicAspectPolicy::Auto};
+    std::atomic<DialogueZoomPolicy> g_runtimeDialoguePolicy{DialogueZoomPolicy::Native};
+    std::filesystem::path g_configPath;
     std::atomic<ReplayState> g_state{ReplayState::WaitingForAutomaticUpdate};
     std::atomic<std::uint32_t> g_lastCameraMode{};
     std::atomic<std::uint64_t> g_transitionTraceSequence{0};
@@ -110,8 +127,14 @@ namespace
     std::uint8_t g_cinematicOriginalImmediate[sizeof(kCinematicOriginalImmediate)]{};
     bool g_cinematicAspectPatched{};
     SafetyHookMid g_cinematicAspectStoreHook;
+    SafetyHookMid g_dialogueBoundaryHook;
     std::atomic<float> g_lastObservedAspect{kNativeAspect};
     std::atomic<std::uintptr_t> g_lastAutoRestoreSource{};
+    std::mutex g_dialogueMutex;
+    DialoguePhase g_dialoguePhase{DialoguePhase::Inactive};
+    float g_dialogueBaseline = std::numeric_limits<float>::quiet_NaN();
+    float g_dialoguePrevious = std::numeric_limits<float>::quiet_NaN();
+    float g_dialogueExitIncomingStart{std::numeric_limits<float>::quiet_NaN()};
 #ifdef GAMEPLAY_ONE_SHOT_CINEMATIC_TRIGGER
     std::atomic_bool g_oneShotCinematicTriggerArmed{false};
 #endif
@@ -252,6 +275,42 @@ namespace
         return false;
     }
 
+    bool ParseHotkey(std::string value, int& result)
+    {
+        value = Trim(std::move(value));
+        if (value.size() == 1) {
+            const char key = static_cast<char>(std::toupper(static_cast<unsigned char>(value.front())));
+            if (key >= 'A' && key <= 'Z') { result = key; return true; }
+            if (key >= '0' && key <= '9') { result = key; return true; }
+            return false;
+        }
+        if (value.size() < 2 || (value.front() != 'F' && value.front() != 'f')) return false;
+        int number = 0;
+        for (std::size_t index = 1; index < value.size(); ++index) {
+            if (value[index] < '0' || value[index] > '9') return false;
+            number = number * 10 + (value[index] - '0');
+        }
+        if (number < 1 || number > 12) return false;
+        result = VK_F1 + number - 1;
+        return true;
+    }
+
+    const char* HotkeyName(int key)
+    {
+        static const char* names[] = {
+            "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8",
+            "F9", "F10", "F11", "F12"
+        };
+        if (key >= VK_F1 && key <= VK_F12) return names[key - VK_F1];
+        static thread_local char singleKey[2];
+        if ((key >= '0' && key <= '9') || (key >= 'A' && key <= 'Z')) {
+            singleKey[0] = static_cast<char>(key);
+            singleKey[1] = '\0';
+            return singleKey;
+        }
+        return "unknown";
+    }
+
     bool ParseCinematicAspectPolicy(std::string value, CinematicAspectPolicy& result)
     {
         value = Trim(std::move(value));
@@ -278,9 +337,56 @@ namespace
         return "Auto";
     }
 
+    bool ParseDialogueZoomPolicy(std::string value, DialogueZoomPolicy& result)
+    {
+        value = Trim(std::move(value));
+        std::transform(value.begin(), value.end(), value.begin(),
+            [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
+        if (value == "native") result = DialogueZoomPolicy::Native;
+        else if (value == "adaptive") result = DialogueZoomPolicy::Adaptive;
+        else if (value == "reduced") result = DialogueZoomPolicy::Reduced;
+        else if (value == "disabled") result = DialogueZoomPolicy::Disabled;
+        else return false;
+        return true;
+    }
+
+    const char* DialogueZoomPolicyName(DialogueZoomPolicy policy)
+    {
+        switch (policy) {
+        case DialogueZoomPolicy::Native: return "Native";
+        case DialogueZoomPolicy::Adaptive: return "Adaptive";
+        case DialogueZoomPolicy::Reduced: return "Reduced";
+        case DialogueZoomPolicy::Disabled: return "Disabled";
+        }
+        return "Native";
+    }
+
+    DialogueZoomPolicy NextDialogueZoomPolicy(DialogueZoomPolicy policy)
+    {
+        switch (policy) {
+        case DialogueZoomPolicy::Native: return DialogueZoomPolicy::Adaptive;
+        case DialogueZoomPolicy::Adaptive: return DialogueZoomPolicy::Reduced;
+        case DialogueZoomPolicy::Reduced: return DialogueZoomPolicy::Disabled;
+        case DialogueZoomPolicy::Disabled: return DialogueZoomPolicy::Native;
+        }
+        return DialogueZoomPolicy::Native;
+    }
+
+    CinematicAspectPolicy NextCinematicAspectPolicy(CinematicAspectPolicy policy)
+    {
+        switch (policy) {
+        case CinematicAspectPolicy::Auto: return CinematicAspectPolicy::Native;
+        case CinematicAspectPolicy::Native: return CinematicAspectPolicy::Forced16x9;
+        case CinematicAspectPolicy::Forced16x9: return CinematicAspectPolicy::Forced21x9;
+        case CinematicAspectPolicy::Forced21x9: return CinematicAspectPolicy::Forced32x9;
+        case CinematicAspectPolicy::Forced32x9: return CinematicAspectPolicy::Auto;
+        }
+        return CinematicAspectPolicy::Auto;
+    }
+
     bool CinematicAspectOverrideEnabled()
     {
-        return g_config.cinematicAspectPolicy != CinematicAspectPolicy::Native;
+        return g_runtimeCinematicPolicy.load(std::memory_order_acquire) != CinematicAspectPolicy::Native;
     }
 
     bool RemoveObsoleteCinematicFovSetting(const std::filesystem::path& path)
@@ -325,28 +431,268 @@ namespace
         return static_cast<bool>(output);
     }
 
+    bool SynchronizeManagedConfigTemplate(const std::filesystem::path& path)
+    {
+        std::ifstream input(path);
+        if (!input) return false;
+
+        std::vector<std::string> source;
+        std::string line;
+        while (std::getline(input, line)) source.push_back(std::move(line));
+
+        constexpr const char* kCinematicComments[] = {
+            "; Controls cinematic framing on ultrawide displays.",
+            "; Auto   - use the detected display aspect ratio.",
+            "; Native - keep the game's original cinematic behavior.",
+            "; 16:9   - force the native 16:9 cinematic frame.",
+            "; 21:9   - force a 21:9 cinematic frame.",
+            "; 32:9   - force a 32:9 cinematic frame.",
+        };
+        constexpr const char* kDialogueComments[] = {
+            "; Controls the native dialogue camera zoom.",
+            "; Native   - use the game's original dialogue zoom, currently targeting 70°.",
+            "; Adaptive - preserve the native optical zoom strength relative to the current gameplay FOV.",
+            "; Reduced  - apply half of the Adaptive optical zoom strength.",
+            ";            Example: 110° gameplay FOV -> Adaptive ≈90°, Reduced ≈100°.",
+            "; Disabled - keep the current gameplay FOV during dialogue.",
+        };
+        constexpr const char* kHotkeyComments[] = {
+            "; Enables or disables all runtime hotkeys.",
+            "; Supported keys: F1-F12, 0-9 and A-Z.",
+            "; Key used to cycle the cinematic mode for the next cinematic.",
+            "; Auto -> Native -> 16:9 -> 21:9 -> 32:9 -> Auto.",
+            "; Does not affect a cinematic that is already playing.",
+            "; Key used to cycle the dialogue zoom mode for the next dialogue.",
+            "; Native -> Adaptive -> Reduced -> Disabled -> Native.",
+            "; Does not affect a dialogue that is already in progress.",
+        };
+
+        std::vector<std::string> output;
+        output.reserve(source.size() + 16);
+        std::string section;
+        std::array<bool, 4> hasManagedComments{};
+        std::array<bool, 4> insertedManagedComments{};
+        bool legacyHotkeyComments = false;
+        bool hasHotkeyRangeComment = false;
+        for (const auto& original : source) {
+            const auto trimmed = Trim(original);
+            if (trimmed.size() >= 2 && trimmed.front() == '[' && trimmed.back() == ']') {
+                section = Trim(trimmed.substr(1, trimmed.size() - 2));
+                continue;
+            }
+            const auto mark = [&](std::size_t index, const auto& comments) {
+                for (const auto* comment : comments)
+                    if (trimmed == comment) hasManagedComments[index] = true;
+            };
+            if (section == "Gameplay" && (trimmed == "; Correct gameplay aspect behavior on ultrawide displays." ||
+                trimmed == "; Enables ultrawide aspect-ratio correction during gameplay."))
+                hasManagedComments[0] = true;
+            else if (section == "Cinematics") {
+                mark(1, kCinematicComments);
+                if (trimmed == "; Auto, Native, 16:9, 21:9, 32:9") hasManagedComments[1] = true;
+            }
+            else if (section == "Dialogue") {
+                mark(2, kDialogueComments);
+                if (trimmed == "; Native, Reduced, Disabled") hasManagedComments[2] = true;
+            }
+            else if (section == "Hotkeys") mark(3, kHotkeyComments);
+            if (section == "Hotkeys" && trimmed == "; Supported keys: F1-F12, 0-9 and A-Z.")
+                hasHotkeyRangeComment = true;
+            if (section == "Hotkeys" && (trimmed == "; F9 cycles cinematic mode for the next cinematic:" ||
+                trimmed == "; F10 cycles dialogue mode for the next dialogue:"))
+                legacyHotkeyComments = true;
+        }
+
+        section.clear();
+        bool foundHotkeys = false;
+        bool foundHotkeyEnabled = false;
+        bool foundCinematicCycle = false;
+        bool foundDialogueCycle = false;
+        bool changed = false;
+        for (const auto& original : source) {
+            const auto trimmed = Trim(original);
+            if (trimmed == "; STALKER 2 Ultrawide Fix v0.4.0") {
+                output.emplace_back("; STALKER 2 Ultrawide Fix v0.5.0");
+                changed = true;
+                continue;
+            }
+            if (trimmed.size() >= 2 && trimmed.front() == '[' && trimmed.back() == ']') {
+                section = Trim(trimmed.substr(1, trimmed.size() - 2));
+                if (section == "Hotkeys") foundHotkeys = true;
+                if (section == "Cinematics" || section == "Dialogue" || section == "Hotkeys") {
+                    while (!output.empty() && output.back().empty()) output.pop_back();
+                    output.emplace_back("");
+                    output.emplace_back("");
+                }
+            }
+
+            const auto separator = trimmed.find('=');
+            const bool firstManagedKey = separator != std::string::npos &&
+                (section == "Gameplay" || section == "Cinematics" ||
+                 section == "Dialogue" || section == "Hotkeys");
+            if (firstManagedKey) {
+                const auto key = Trim(trimmed.substr(0, separator));
+                if (section == "Hotkeys") {
+                    if (key == "Enabled" && !hasManagedComments[3] && !insertedManagedComments[3]) {
+                        output.emplace_back(kHotkeyComments[0]);
+                        output.emplace_back(kHotkeyComments[1]);
+                        insertedManagedComments[3] = true;
+                        changed = true;
+                    } else if (key == "Enabled" && !hasHotkeyRangeComment && hasManagedComments[3]) {
+                        output.emplace_back(kHotkeyComments[1]);
+                        hasHotkeyRangeComment = true;
+                        changed = true;
+                    } else if (key == "CinematicCycle" && legacyHotkeyComments) {
+                        if (!output.empty() && !output.back().empty()) output.emplace_back("");
+                        output.emplace_back(kHotkeyComments[2]);
+                        output.emplace_back(kHotkeyComments[3]);
+                        output.emplace_back(kHotkeyComments[4]);
+                        changed = true;
+                    } else if (key == "DialogueCycle" && legacyHotkeyComments) {
+                        if (!output.empty() && !output.back().empty()) output.emplace_back("");
+                        output.emplace_back(kHotkeyComments[5]);
+                        output.emplace_back(kHotkeyComments[6]);
+                        output.emplace_back(kHotkeyComments[7]);
+                        changed = true;
+                    }
+                } else {
+                    std::size_t sectionIndex = section == "Gameplay" ? 0 :
+                        section == "Cinematics" ? 1 : 2;
+                    if (!hasManagedComments[sectionIndex] && !insertedManagedComments[sectionIndex]) {
+                        if (section == "Gameplay")
+                        output.emplace_back("; Enables ultrawide aspect-ratio correction during gameplay.");
+                        else if (section == "Cinematics")
+                            for (const auto* comment : kCinematicComments) output.emplace_back(comment);
+                        else
+                            for (const auto* comment : kDialogueComments) output.emplace_back(comment);
+                        insertedManagedComments[sectionIndex] = true;
+                        changed = true;
+                    }
+                }
+            }
+
+            if (section == "Hotkeys" && legacyHotkeyComments && (trimmed == "; F9 cycles cinematic mode for the next cinematic:" ||
+                trimmed == "; F10 cycles dialogue mode for the next dialogue:" ||
+                trimmed == "; Auto -> Native -> 16:9 -> 21:9 -> 32:9 -> Auto." ||
+                trimmed == "; It does not change a cinematic that is already playing." ||
+                trimmed == "; Native -> Reduced -> Disabled -> Native." ||
+                trimmed == "; It does not change a dialogue that is already in progress.")) {
+                changed = true;
+                continue;
+            }
+
+            if (section == "Hotkeys" && (trimmed == "; Key used to cycle the cinematic mode for the next cinematic." ||
+                trimmed == "; Key used to cycle the dialogue zoom mode for the next dialogue.")) {
+                if (!output.empty() && !output.back().empty()) {
+                    output.emplace_back("");
+                    changed = true;
+                }
+            }
+
+            if (section == "Gameplay" && trimmed == "; Correct gameplay aspect behavior on ultrawide displays.") {
+                output.emplace_back("; Enables ultrawide aspect-ratio correction during gameplay.");
+                changed = true;
+                continue;
+            }
+            if (section == "Cinematics" && trimmed == "; Auto, Native, 16:9, 21:9, 32:9") {
+                for (const auto* comment : kCinematicComments) output.emplace_back(comment);
+                changed = true;
+                continue;
+            }
+            if (section == "Dialogue" && trimmed == "; Native, Reduced, Disabled") {
+                for (const auto* comment : kDialogueComments) output.emplace_back(comment);
+                changed = true;
+                continue;
+            }
+            if (section == "Hotkeys") {
+                const auto separator = trimmed.find('=');
+                if (separator != std::string::npos) {
+                    const auto key = Trim(trimmed.substr(0, separator));
+                    if (key == "Enabled") foundHotkeyEnabled = true;
+                    if (key == "CinematicCycle") foundCinematicCycle = true;
+                    if (key == "DialogueCycle") foundDialogueCycle = true;
+                }
+            }
+            output.push_back(original);
+        }
+
+        if (!foundHotkeys) {
+            while (!output.empty() && output.back().empty()) output.pop_back();
+            output.emplace_back("");
+            output.emplace_back("");
+            output.emplace_back("[Hotkeys]");
+            for (const auto* comment : kHotkeyComments) output.emplace_back(comment);
+            output.emplace_back("Enabled=false");
+            output.emplace_back("CinematicCycle=F9");
+            output.emplace_back("DialogueCycle=F10");
+            changed = true;
+        } else {
+            if (!foundHotkeyEnabled) { output.emplace_back("Enabled=false"); changed = true; }
+            if (!foundCinematicCycle) { output.emplace_back("CinematicCycle=F9"); changed = true; }
+            if (!foundDialogueCycle) { output.emplace_back("DialogueCycle=F10"); changed = true; }
+        }
+
+        if (!changed && output == source) return false;
+        std::ofstream file(path, std::ios::out | std::ios::trunc);
+        if (!file) return false;
+        for (std::size_t index = 0; index < output.size(); ++index) {
+            file << output[index];
+            if (index + 1 < output.size()) file << '\n';
+        }
+        return static_cast<bool>(file);
+    }
+
     bool LoadFeatureConfig(const std::filesystem::path& path)
     {
         if (!std::filesystem::exists(path)) {
             std::ofstream created(path, std::ios::out | std::ios::trunc);
             if (!created) return false;
-            created << "; STALKER 2 Ultrawide Fix v0.4.0\n"
+            created << "; STALKER 2 Ultrawide Fix v0.5.0\n"
                 << "; Author: Elhait\n"
                 << "; GitHub: https://github.com/Elhait/STALKER-2-Ultrawide-Fix-for-UE-5.5.4\n"
                 << "; Nexus Mods: https://www.nexusmods.com/stalker2heartofchornobyl/mods/2416\n"
-                << "; Configuration changes apply after restarting the game.\n"
+                << "; Configuration changes apply after restarting the game. F9/F10 apply to the next applicable state.\n"
                 << "\n[Gameplay]\n"
-                << "; Correct gameplay aspect behavior on ultrawide displays.\n"
+                << "; Enables ultrawide aspect-ratio correction during gameplay.\n"
                 << "Enabled=true\n"
-                << "\n[Cinematics]\n"
-                << "; Auto, Native, 16:9, 21:9, 32:9\n"
-                << "AspectRatio=Auto\n";
+                << "\n\n\n[Cinematics]\n"
+                << "; Controls cinematic framing on ultrawide displays.\n"
+                << "; Auto   - use the detected display aspect ratio.\n"
+                << "; Native - keep the game's original cinematic behavior.\n"
+                << "; 16:9   - force the native 16:9 cinematic frame.\n"
+                << "; 21:9   - force a 21:9 cinematic frame.\n"
+                << "; 32:9   - force a 32:9 cinematic frame.\n"
+                << "AspectRatio=Auto\n"
+                << "\n\n\n[Dialogue]\n"
+                << "; Controls the native dialogue camera zoom.\n"
+                << "; Native   - use the game's original dialogue zoom, currently targeting 70°.\n"
+                << "; Adaptive - preserve the native optical zoom strength relative to the current gameplay FOV.\n"
+                << "; Reduced  - apply half of the Adaptive optical zoom strength.\n"
+                << ";            Example: 110° gameplay FOV -> Adaptive ≈90°, Reduced ≈100°.\n"
+                << "; Disabled - keep the current gameplay FOV during dialogue.\n"
+                << "Zoom=Reduced\n"
+                << "\n\n\n[Hotkeys]\n"
+                << "; Enables or disables all runtime hotkeys.\n"
+                << "; Supported keys: F1-F12, 0-9 and A-Z.\n"
+                << "Enabled=false\n"
+                << "\n"
+                << "; Key used to cycle the cinematic mode for the next cinematic.\n"
+                << "; Auto -> Native -> 16:9 -> 21:9 -> 32:9 -> Auto.\n"
+                << "; Does not affect a cinematic that is already playing.\n"
+                << "CinematicCycle=F9\n"
+                << "; Key used to cycle the dialogue zoom mode for the next dialogue.\n"
+                << "; Native -> Adaptive -> Reduced -> Disabled -> Native.\n"
+                << "; Does not affect a dialogue that is already in progress.\n"
+                << "DialogueCycle=F10\n";
             return static_cast<bool>(created);
         }
 
         const bool migrated = RemoveObsoleteCinematicFovSetting(path);
         if (migrated)
             Log("Config migration: removed obsolete Cinematics.FovCorrection setting.");
+
+        if (SynchronizeManagedConfigTemplate(path))
+            Log("Config template synchronized: updated managed descriptions and hotkey settings.");
 
         std::ifstream input(path);
         if (!input) return false;
@@ -370,6 +716,27 @@ namespace
                 }
                 continue;
             }
+            if (section == "Dialogue" && key == "Zoom") {
+                DialogueZoomPolicy policy{};
+                if (ParseDialogueZoomPolicy(line.substr(separator + 1), policy))
+                    g_config.dialogueZoomPolicy = policy;
+                continue;
+            }
+            if (section == "Hotkeys" && key == "Enabled") {
+                bool enabled = true;
+                if (ParseBool(line.substr(separator + 1), enabled)) g_config.hotkeysEnabled = enabled;
+                continue;
+            }
+            if (section == "Hotkeys" && key == "CinematicCycle") {
+                int hotkey = VK_F9;
+                if (ParseHotkey(line.substr(separator + 1), hotkey)) g_config.cinematicCycleKey = hotkey;
+                continue;
+            }
+            if (section == "Hotkeys" && key == "DialogueCycle") {
+                int hotkey = VK_F10;
+                if (ParseHotkey(line.substr(separator + 1), hotkey)) g_config.dialogueCycleKey = hotkey;
+                continue;
+            }
             bool value = true;
             if (!ParseBool(line.substr(separator + 1), value)) continue;
             if (section == "Gameplay" && key == "Enabled") g_config.gameplayEnabled = value;
@@ -380,6 +747,69 @@ namespace
                 g_config.cinematicAspectPolicy = value ? CinematicAspectPolicy::Auto : CinematicAspectPolicy::Native;
         }
         return true;
+    }
+
+    bool PersistConfigValue(const std::filesystem::path& path, const char* targetSection,
+        const char* targetKey, const std::string& value)
+    {
+        std::ifstream input(path);
+        if (!input) return false;
+        std::vector<std::string> lines;
+        std::string line;
+        while (std::getline(input, line)) lines.push_back(std::move(line));
+
+        bool inSection = false;
+        bool replaced = false;
+        for (auto& current : lines) {
+            const auto trimmed = Trim(current);
+            if (trimmed.size() >= 2 && trimmed.front() == '[' && trimmed.back() == ']')
+                inSection = Trim(trimmed.substr(1, trimmed.size() - 2)) == targetSection;
+            if (!inSection) continue;
+            const auto separator = trimmed.find('=');
+            if (separator != std::string::npos && Trim(trimmed.substr(0, separator)) == targetKey) {
+                current = std::string(targetKey) + "=" + value;
+                replaced = true;
+                break;
+            }
+        }
+        if (!replaced) {
+            lines.push_back("");
+            lines.push_back(std::string("[") + targetSection + "]");
+            lines.push_back(std::string(targetKey) + "=" + value);
+        }
+
+        const auto temporary = path.wstring() + L".tmp";
+        {
+            std::ofstream output(temporary, std::ios::out | std::ios::trunc);
+            if (!output) return false;
+            for (std::size_t index = 0; index < lines.size(); ++index) {
+                output << lines[index];
+                if (index + 1 < lines.size()) output << '\n';
+            }
+            if (!output) return false;
+        }
+        if (MoveFileExW(temporary.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+            return true;
+
+        const auto replaceError = GetLastError();
+        Log("Atomic INI replacement unavailable: win32Error=", replaceError,
+            "; using direct-write fallback.");
+        std::ofstream output(path, std::ios::out | std::ios::trunc);
+        if (output) {
+            for (std::size_t index = 0; index < lines.size(); ++index) {
+                output << lines[index];
+                if (index + 1 < lines.size()) output << '\n';
+            }
+            if (output) {
+                DeleteFileW(temporary.c_str());
+                return true;
+            }
+        }
+        const auto directError = GetLastError();
+        Log("Config persistence direct write failed: replaceError=", replaceError,
+            " directError=", directError, ".");
+        DeleteFileW(temporary.c_str());
+        return false;
     }
 
     bool IsWritable(std::uintptr_t address, std::size_t size)
@@ -415,7 +845,7 @@ namespace
 
     float ResolveCinematicAspect(std::uintptr_t object)
     {
-        switch (g_config.cinematicAspectPolicy) {
+        switch (g_runtimeCinematicPolicy.load(std::memory_order_acquire)) {
         case CinematicAspectPolicy::Forced16x9: return kNativeAspect;
         case CinematicAspectPolicy::Forced21x9: return kCinemaAspect;
         case CinematicAspectPolicy::Forced32x9: return kWideAspect;
@@ -436,12 +866,12 @@ namespace
     void ApplyCinematicAspectStore(SafetyHookContext& context)
     {
         const auto targetObject = static_cast<std::uintptr_t>(context.rax);
+        const auto policy = g_runtimeCinematicPolicy.load(std::memory_order_acquire);
         const float observedAspect = ReadRuntimeAspect(targetObject);
         // For Auto, the native store may already have written 16:9 into the
         // object by the time this boundary is observed. Use the cached runtime
         // camera aspect, which is also the source used by the FOV boundary.
-        const float resolvedAspect = ResolveCinematicAspect(
-            g_config.cinematicAspectPolicy == CinematicAspectPolicy::Auto ? 0 : targetObject);
+        const float resolvedAspect = ResolveCinematicAspect(policy == CinematicAspectPolicy::Auto ? 0 : targetObject);
         const float aspect = IsValidAspect(resolvedAspect) ? resolvedAspect : kNativeAspect;
         const bool writable = targetObject &&
             targetObject <= (std::numeric_limits<std::uintptr_t>::max)() - kAspectOffset &&
@@ -449,8 +879,8 @@ namespace
         if (writable) {
             std::memcpy(reinterpret_cast<void*>(targetObject + kAspectOffset), &aspect, sizeof(aspect));
             Log("Cinematic aspect store: object=0x", std::hex, targetObject, std::dec,
-                " aspect=", aspect, " policy=", CinematicAspectPolicyName(g_config.cinematicAspectPolicy),
-                " source=", g_config.cinematicAspectPolicy == CinematicAspectPolicy::Auto
+                " aspect=", aspect, " policy=", CinematicAspectPolicyName(policy),
+                " source=", policy == CinematicAspectPolicy::Auto
                     ? (IsValidAspect(observedAspect) ? "runtime-camera" : "native-fallback")
                     : "configured", ".");
         } else {
@@ -967,6 +1397,7 @@ namespace
     void TraceCinematicEnter(SafetyHookContext& context)
     {
         const bool cinematicFovEnabled = CinematicAspectOverrideEnabled();
+        const auto policy = g_runtimeCinematicPolicy.load(std::memory_order_acquire);
         if (cinematicFovEnabled) {
             bool expected = false;
             if (!g_cinematicFovApplied.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) return;
@@ -980,7 +1411,7 @@ namespace
         g_coordinator.store(CoordinatorState::CinematicActive, std::memory_order_release);
         Log("Global cinematic ENTER: aspect=", aspect, " authoredFov=", before,
             " transformedFov=", context.xmm0.f32[0],
-            " aspectPolicy=", CinematicAspectPolicyName(g_config.cinematicAspectPolicy), ".",
+            " aspectPolicy=", CinematicAspectPolicyName(policy), ".",
             " Gameplay replay suppressed.");
     }
 
@@ -991,6 +1422,176 @@ namespace
         g_coordinator.store(CoordinatorState::CinematicExiting, std::memory_order_release);
         Log("Global cinematic EXIT: nativeTargetFov=", context.xmm0.f32[0],
             ". Gameplay replay suppressed until native recovery.");
+    }
+
+    float TransformDialogueProjectionSample(float incoming, float baseline, float target)
+    {
+        constexpr float kNativeDialogueTarget = 70.0f;
+        constexpr float kProjectionIntervalTolerance = 0.25f;
+        const float intervalLow = baseline < kNativeDialogueTarget ? baseline : kNativeDialogueTarget;
+        const float intervalHigh = baseline > kNativeDialogueTarget ? baseline : kNativeDialogueTarget;
+        if (incoming < intervalLow - kProjectionIntervalTolerance ||
+            incoming > intervalHigh + kProjectionIntervalTolerance) return incoming;
+        const float baselineProjection = std::tan(baseline * 0.5f * 0.01745329251994329577f);
+        const float nativeTargetProjection = std::tan(kNativeDialogueTarget * 0.5f * 0.01745329251994329577f);
+        const float incomingProjection = std::tan(incoming * 0.5f * 0.01745329251994329577f);
+        const float targetProjection = std::tan(target * 0.5f * 0.01745329251994329577f);
+        const float nativeSpan = nativeTargetProjection - baselineProjection;
+        if (!std::isfinite(nativeSpan) || std::fabs(nativeSpan) <= 1.0e-6f) return incoming;
+
+        const float progress = std::clamp(
+            (incomingProjection - baselineProjection) / nativeSpan, 0.0f, 1.0f);
+        const float outputProjection = baselineProjection +
+            progress * (targetProjection - baselineProjection);
+        const float output = 2.0f * std::atan(outputProjection) /
+            0.01745329251994329577f;
+        return std::isfinite(output) ? output : incoming;
+    }
+
+    float TransformDialogueExitSample(float incoming, float baseline, float target, float exitStart)
+    {
+        constexpr float kRadiansPerDegree = 0.01745329251994329577f;
+        const float startProjection = std::tan(exitStart * 0.5f * kRadiansPerDegree);
+        const float baselineProjection = std::tan(baseline * 0.5f * kRadiansPerDegree);
+        const float incomingProjection = std::tan(incoming * 0.5f * kRadiansPerDegree);
+        const float targetProjection = std::tan(target * 0.5f * kRadiansPerDegree);
+        const float nativeSpan = baselineProjection - startProjection;
+        if (!std::isfinite(nativeSpan) || std::fabs(nativeSpan) <= 1.0e-6f) return incoming;
+
+        const float progress = std::clamp(
+            (incomingProjection - startProjection) / nativeSpan, 0.0f, 1.0f);
+        const float outputProjection = targetProjection +
+            progress * (baselineProjection - targetProjection);
+        const float output = 2.0f * std::atan(outputProjection) / kRadiansPerDegree;
+        return std::isfinite(output) ? output : incoming;
+    }
+
+    float DialogueAdaptiveTarget(float baseline)
+    {
+        constexpr float kNativeDialogueTarget = 70.0f;
+        constexpr float kNativeReferenceGameplay = 90.0f;
+        constexpr float kRadiansPerDegree = 0.01745329251994329577f;
+        const float nativeZoom =
+            std::tan(kNativeReferenceGameplay * 0.5f * kRadiansPerDegree) /
+            std::tan(kNativeDialogueTarget * 0.5f * kRadiansPerDegree);
+        const float projection = std::tan(baseline * 0.5f * kRadiansPerDegree) / nativeZoom;
+        const float output = 2.0f * std::atan(projection) / kRadiansPerDegree;
+        return std::isfinite(output) ? output : baseline;
+    }
+
+    float DialogueReducedTarget(float baseline)
+    {
+        constexpr float kNativeDialogueTarget = 70.0f;
+        constexpr float kNativeReferenceGameplay = 90.0f;
+        constexpr float kRadiansPerDegree = 0.01745329251994329577f;
+        const float nativeZoom =
+            std::tan(kNativeReferenceGameplay * 0.5f * kRadiansPerDegree) /
+            std::tan(kNativeDialogueTarget * 0.5f * kRadiansPerDegree);
+        const float projection = std::tan(baseline * 0.5f * kRadiansPerDegree) /
+            std::sqrt(nativeZoom);
+        const float output = 2.0f * std::atan(projection) / kRadiansPerDegree;
+        return std::isfinite(output) ? output : baseline;
+    }
+
+    void TraceDialogueBoundary(SafetyHookContext& context)
+    {
+        const float incoming = context.xmm6.f32[0];
+        if (!std::isfinite(incoming) || incoming <= 1.0f || incoming >= 179.0f) return;
+
+        std::lock_guard lock(g_dialogueMutex);
+        if (g_coordinator.load(std::memory_order_acquire) != CoordinatorState::Gameplay) {
+            g_dialoguePhase = DialoguePhase::Inactive;
+            g_dialogueBaseline = std::numeric_limits<float>::quiet_NaN();
+            g_dialoguePrevious = std::numeric_limits<float>::quiet_NaN();
+            g_dialogueExitIncomingStart = std::numeric_limits<float>::quiet_NaN();
+            return;
+        }
+        const auto policy = g_runtimeDialoguePolicy.load(std::memory_order_acquire);
+        if (policy == DialogueZoomPolicy::Native) {
+            g_dialoguePhase = DialoguePhase::Inactive;
+            g_dialogueBaseline = std::numeric_limits<float>::quiet_NaN();
+            g_dialoguePrevious = std::numeric_limits<float>::quiet_NaN();
+            g_dialogueExitIncomingStart = std::numeric_limits<float>::quiet_NaN();
+            return;
+        }
+        const float previous = g_dialoguePrevious;
+        const bool descending = std::isfinite(previous) && incoming < previous - kDialogueTransformEpsilon;
+        const bool ascending = std::isfinite(previous) && incoming > previous + kDialogueTransformEpsilon;
+
+        if (g_dialoguePhase == DialoguePhase::Inactive) {
+            if (!std::isfinite(g_dialogueBaseline)) {
+                g_dialogueBaseline = incoming;
+                g_dialoguePhase = DialoguePhase::Active;
+                g_dialogueExitIncomingStart = std::numeric_limits<float>::quiet_NaN();
+                Log("Dialogue lifecycle started: baselineG=", g_dialogueBaseline,
+                    " policy=", DialogueZoomPolicyName(policy), ".");
+            } else if (descending) {
+                g_dialogueBaseline = previous;
+                g_dialoguePhase = DialoguePhase::Active;
+                g_dialogueExitIncomingStart = std::numeric_limits<float>::quiet_NaN();
+                Log("Dialogue lifecycle restarted after gameplay descent: baselineG=", g_dialogueBaseline, ".");
+            }
+        } else if (g_dialoguePhase == DialoguePhase::Active && ascending) {
+            g_dialoguePhase = DialoguePhase::Exiting;
+            g_dialogueExitIncomingStart = incoming;
+            Log("Dialogue lifecycle exiting: incoming=", incoming, " baselineG=", g_dialogueBaseline, ".");
+        }
+
+        float output = incoming;
+        if (g_dialoguePhase == DialoguePhase::Exiting && ascending &&
+            std::isfinite(g_dialogueBaseline) &&
+            std::fabs(incoming - g_dialogueBaseline) <= kDialogueRecoveryEpsilon) {
+            Log("Dialogue lifecycle recovered: baselineG=", g_dialogueBaseline, ". Native recovery complete.");
+            g_dialoguePhase = DialoguePhase::Inactive;
+            g_dialogueExitIncomingStart = std::numeric_limits<float>::quiet_NaN();
+            output = incoming;
+        }
+        else if ((policy == DialogueZoomPolicy::Adaptive || policy == DialogueZoomPolicy::Reduced) &&
+            (g_dialoguePhase == DialoguePhase::Active || g_dialoguePhase == DialoguePhase::Exiting) &&
+            std::isfinite(g_dialogueBaseline)) {
+            const float target = policy == DialogueZoomPolicy::Adaptive
+                ? DialogueAdaptiveTarget(g_dialogueBaseline)
+                : DialogueReducedTarget(g_dialogueBaseline);
+            output = g_dialoguePhase == DialoguePhase::Exiting &&
+                std::isfinite(g_dialogueExitIncomingStart)
+                ? TransformDialogueExitSample(incoming, g_dialogueBaseline, target,
+                    g_dialogueExitIncomingStart)
+                : TransformDialogueProjectionSample(incoming, g_dialogueBaseline, target);
+        }
+        else if (policy == DialogueZoomPolicy::Disabled &&
+            (g_dialoguePhase == DialoguePhase::Active || g_dialoguePhase == DialoguePhase::Exiting) &&
+            std::isfinite(g_dialogueBaseline)) {
+            output = g_dialogueBaseline;
+        }
+
+        if (std::isfinite(output) && output > 1.0f && output < 179.0f)
+            context.xmm1.f32[0] = output;
+        g_dialoguePrevious = incoming;
+    }
+
+    bool InstallDialogueBoundary()
+    {
+        const auto matches = Memory::PatternScanAll(g_executable, kDialogueBoundarySignature);
+        if (matches.size() != 1) {
+            Log("Dialogue boundary resolver rejected: matches=", matches.size(), ". Native pass-through retained.");
+            return false;
+        }
+        auto* hook = matches.front() + kDialogueBoundaryHookOffset;
+        constexpr std::uint8_t expected[] = { 0xFF, 0x90, 0x08, 0x06, 0x00, 0x00 };
+        if (std::memcmp(hook, expected, sizeof(expected)) != 0) {
+            Log("Dialogue boundary instruction contract rejected. Native pass-through retained.");
+            return false;
+        }
+        g_dialogueBoundaryHook = safetyhook::create_mid(hook, TraceDialogueBoundary);
+        if (!g_dialogueBoundaryHook || !g_dialogueBoundaryHook.enable()) {
+            g_dialogueBoundaryHook.reset();
+            Log("Dialogue boundary hook setup failed. Native pass-through retained.");
+            return false;
+        }
+        Log("Dialogue boundary hook installed: RVA=0x", std::hex,
+            reinterpret_cast<std::uintptr_t>(hook) - reinterpret_cast<std::uintptr_t>(g_executable),
+            std::dec, " policy=", DialogueZoomPolicyName(g_runtimeDialoguePolicy.load(std::memory_order_acquire)), ".");
+        return true;
     }
 
     void ReplayManualTransition(SafetyHookContext& context)
@@ -1085,6 +1686,41 @@ namespace
         return verified;
     }
 
+    void HotkeyLoop()
+    {
+        bool previousDialogueKey = false;
+        bool previousCinematicKey = false;
+        for (;;) {
+            const bool dialogueKey = (GetAsyncKeyState(g_config.dialogueCycleKey) & 0x8000) != 0;
+            const bool cinematicKey = (GetAsyncKeyState(g_config.cinematicCycleKey) & 0x8000) != 0;
+            if (g_config.hotkeysEnabled) {
+                if (dialogueKey && !previousDialogueKey) {
+                    const auto policy = NextDialogueZoomPolicy(
+                        g_runtimeDialoguePolicy.load(std::memory_order_acquire));
+                    g_runtimeDialoguePolicy.store(policy, std::memory_order_release);
+                    if (PersistConfigValue(g_configPath, "Dialogue", "Zoom", DialogueZoomPolicyName(policy)))
+                        Log("Hotkey ", HotkeyName(g_config.dialogueCycleKey), ": Dialogue.Zoom=", DialogueZoomPolicyName(policy), " persisted.");
+                    else
+                        Log("Hotkey ", HotkeyName(g_config.dialogueCycleKey), ": Dialogue.Zoom=", DialogueZoomPolicyName(policy), " active; persistence failed.");
+                }
+                if (cinematicKey && !previousCinematicKey) {
+                    const auto policy = NextCinematicAspectPolicy(
+                        g_runtimeCinematicPolicy.load(std::memory_order_acquire));
+                    g_runtimeCinematicPolicy.store(policy, std::memory_order_release);
+                    if (PersistConfigValue(g_configPath, "Cinematics", "AspectRatio", CinematicAspectPolicyName(policy)))
+                        Log("Hotkey ", HotkeyName(g_config.cinematicCycleKey), ": Cinematics.AspectRatio=", CinematicAspectPolicyName(policy),
+                            " persisted for next cinematic.");
+                    else
+                        Log("Hotkey ", HotkeyName(g_config.cinematicCycleKey), ": Cinematics.AspectRatio=", CinematicAspectPolicyName(policy),
+                            " active for next cinematic; persistence failed.");
+                }
+            }
+            previousDialogueKey = dialogueKey;
+            previousCinematicKey = cinematicKey;
+            Sleep(50);
+        }
+    }
+
     DWORD WINAPI Initialize(void*)
     {
         WCHAR modulePath[MAX_PATH]{};
@@ -1092,6 +1728,7 @@ namespace
         const auto moduleDirectory = std::filesystem::path(modulePath).remove_filename();
         const auto logPath = moduleDirectory / "STALKER2UltrawideFix.log";
         const auto configPath = moduleDirectory / "STALKER2UltrawideFix.ini";
+        g_configPath = configPath;
         std::ofstream(logPath, std::ios::out | std::ios::trunc).close();
         try {
             g_logger = spdlog::basic_logger_mt("STALKER2UltrawideFix", logPath.string(), true);
@@ -1110,10 +1747,17 @@ namespace
                 " gameSha256=", gameHashAvailable ? gameHash : "unavailable", ".");
             if (!LoadFeatureConfig(configPath))
                 Log("Configuration unavailable; using defaults with all fixes enabled.");
+            g_runtimeCinematicPolicy.store(g_config.cinematicAspectPolicy, std::memory_order_release);
+            g_runtimeDialoguePolicy.store(g_config.dialogueZoomPolicy, std::memory_order_release);
             Log("Configuration: Gameplay.Enabled=", g_config.gameplayEnabled,
-                " Cinematic.AspectRatio=", CinematicAspectPolicyName(g_config.cinematicAspectPolicy), ".");
+                " Cinematic.AspectRatio=", CinematicAspectPolicyName(g_config.cinematicAspectPolicy),
+                " Dialogue.Zoom=", DialogueZoomPolicyName(g_config.dialogueZoomPolicy), ".");
             Log("Gameplay aspect fix loaded. FOV is preserved from the game's settings.");
-            if (CinematicAspectOverrideEnabled()) {
+            if ((g_config.dialogueZoomPolicy != DialogueZoomPolicy::Native || g_config.hotkeysEnabled) && !InstallDialogueBoundary())
+                Log("Dialogue policy remains native because the validated boundary was not installed.");
+            else if (g_config.dialogueZoomPolicy == DialogueZoomPolicy::Native)
+                Log("Dialogue policy is Native; dialogue boundary hook bypassed.");
+            if (CinematicAspectOverrideEnabled() || g_config.hotkeysEnabled) {
                 std::uint8_t* cinematicAspectStore = nullptr;
                 if (!ResolveCinematicAspectStore(cinematicAspectStore) ||
                     !InstallCinematicAspect(cinematicAspectStore))
@@ -1122,7 +1766,7 @@ namespace
             } else {
                 Log("Cinematic aspect policy is Native; aspect store hook bypassed.");
             }
-            if (CinematicAspectOverrideEnabled()) {
+            if (CinematicAspectOverrideEnabled() || g_config.hotkeysEnabled) {
                 std::uint8_t* cinematicEnter = nullptr;
                 std::uint8_t* cinematicExit = nullptr;
                 if (!ResolveCinematicFovCallsites(cinematicEnter, cinematicExit))
@@ -1146,6 +1790,15 @@ namespace
             } else {
                 Log("Gameplay aspect fix disabled by configuration.");
             }
+            if (g_config.hotkeysEnabled) {
+                const auto hotkeyThread = CreateThread(nullptr, 0,
+                    [](void*) -> DWORD { HotkeyLoop(); return 0; }, nullptr, 0, nullptr);
+                if (!hotkeyThread) throw std::runtime_error("hotkey thread could not start");
+                CloseHandle(hotkeyThread);
+                Log("Hotkeys enabled: F10=Dialogue cycle, F9=Cinematics cycle for next cinematic.");
+            } else {
+                Log("Hotkeys disabled by configuration.");
+            }
 #ifdef GAMEPLAY_ONE_SHOT_CINEMATIC_TRIGGER
             const auto triggerThread = CreateThread(nullptr, 0, OneShotTriggerLoop, nullptr, 0, nullptr);
             if (!triggerThread) throw std::runtime_error("one-shot trigger thread could not start");
@@ -1159,6 +1812,7 @@ namespace
 #endif
 #endif
         } catch (const std::exception& exception) {
+            g_dialogueBoundaryHook.reset();
             g_cinematicExitHook.reset();
             g_cinematicEnterHook.reset();
             RestoreCinematicAspect();
@@ -1173,6 +1827,7 @@ namespace
 BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID)
 {
     if (reason == DLL_PROCESS_DETACH) {
+        g_dialogueBoundaryHook.reset();
         RestoreCinematicAspect();
         return TRUE;
     }

@@ -2,6 +2,44 @@
 
 This document records evidence-backed research outcomes, completed implementations and exceptional repository housekeeping. Ordinary README, release-text, index and link-maintenance edits are intentionally not logged here.
 
+## 2026-09-01 — Reject direct ADS-register primitive transition
+
+### Scope and non-goals
+
+- Validate the refined read-only 2.0.4 primitive/ADS observer against the post-cinematic weapon/viewmodel correction.
+- No camera, primitive or render-state writes; no production ASI changes; no `MarkRenderStateDirty` promotion.
+
+### Changed paths
+
+- Updated `src/weapon_viewmodel_primitive_ads_observer_204.cpp` with ADS register probes.
+- Rebuilt the isolated diagnostic ASI.
+- Updated `WEAPON_VIEWMODEL_FOV_POST_CINEMATIC_CAUSAL_TRACE_TASK_PLAN.md` with the runtime result.
+
+### Validation and evidence
+
+- Camera-writer, mesh-assignment, ADS IN and ADS OUT signatures resolved uniquely on Steam 2.0.4 and all hooks installed.
+- At ADS IN/OUT markers, camera `+0x234` remained `90` and `+0x262` remained `0x1`.
+- ADS register values remained stable. `RSI` had `+0x265=0x2` and parent `+0x265=0x0`; `RAX` and `RCX` did not form valid primitive/parent pairs.
+- No inspected pointer or `+0x265` transition was observed at the reported correction boundary.
+
+### Completed
+
+- Rejected the direct ADS-register primitive transition as the causal explanation in this dataset.
+
+### Remaining / deferred
+
+- Actual rendered weapon/viewmodel primitive remains unresolved.
+- Native primitive setter or direct render-refresh anchor requires separate bounded validation.
+- `MarkRenderStateDirty` remains deferred until a concrete native refresh event is identified.
+
+### Patch summary
+
+Used the refined read-only observer to eliminate the shared-camera scalar and inspected ADS-register primitive-transition hypotheses.
+
+### Changelog summary
+
+Diagnostic-only research; stable gameplay/cinematic behavior unchanged.
+
 ## 2026-09-01 — Organize reverse-engineering research archive
 
 ### Scope and non-goals
@@ -1341,3 +1379,578 @@ contract from the validated 2.0.3 executable.
 
 Documented the portable legacy FOV-consumption fingerprint without reusing its
 historical addresses as 2.0.4 hook targets.
+
+## 2026-09-01 — Reject ADS primitive-setter correction path
+
+### Scope
+
+- Validate whether the unique 2.0.4 `FirstPersonPrimitiveType` (`+0x265`) setter
+  is invoked during the native ADS correction of the post-cinematic weapon/viewmodel state.
+- Keep the test read-only and isolated; do not change the stable ASI.
+
+### Changed
+
+- Reviewed the supplied `STALKER2WeaponViewmodelPrimitiveSetterTrace204.log`.
+- Updated `WEAPON_VIEWMODEL_FOV_POST_CINEMATIC_CAUSAL_TRACE_TASK_PLAN.md` with the runtime result.
+- Rate-limited diagnostic ADS marker logging for the next trace build.
+
+### Validation and limits
+
+- Primitive setter, ADS IN/OUT and camera-writer resolvers installed successfully.
+- No `Primitive setter:` event occurred during the captured ADS marker window.
+- The log contained no explicit cinematic ENTER/EXIT marker, so the result closes
+  the setter-during-ADS hypothesis for the captured window but does not identify
+  the downstream correction mechanism.
+- No production ASI or game state was modified.
+
+### Completed
+
+- Rejected the hypothesis that the observed ADS correction necessarily invokes
+  the resolved `+0x265` setter.
+
+### Remaining / deferred
+
+- Actual first-person/viewmodel projection or refresh consumer remains unresolved.
+- No production fix is justified from this branch.
+
+### Patch summary
+
+Closed the bounded ADS primitive-setter branch on negative runtime evidence and
+reduced diagnostic marker spam.
+
+### Changelog summary
+
+Confirmed that the captured ADS correction path did not call the current 2.0.4
+`+0x265` setter; stable gameplay/cinematic code remains unchanged.
+
+## 2026-09-01 — Close known ADS primitive/mesh differential paths
+
+### Scope
+
+- Analyze the corrected single-window ADS differential capture.
+- Determine whether known primitive setter or mesh-assignment paths change during
+  the post-cinematic weapon/viewmodel correction.
+
+### Changed
+
+- Updated `WEAPON_VIEWMODEL_FOV_POST_CINEMATIC_CAUSAL_TRACE_TASK_PLAN.md` with the clean capture result.
+
+### Validation and limits
+
+- Exactly one ADS differential window was captured.
+- No `+0x265` setter event and no mesh-assignment event occurred inside the window.
+- Camera `+0x234`, `+0x262` and aspect remained stable; only world FOV transitioned
+  from approximately `90.6557` to `83.6122`.
+- The trace does not identify the downstream consumer that visually corrects the
+  weapon/viewmodel.
+
+### Completed
+
+- Closed the known primitive-setter and mesh-assignment hypotheses for the
+  captured ADS correction path.
+
+### Remaining / deferred
+
+- Identify the first-person/viewmodel projection or consumer path that responds
+  to ADS while the inspected scalar and primitive paths remain unchanged.
+- Static bounded audit of `+0x234` reads is next; no production implementation is justified.
+
+### Patch summary
+
+Used a clean ADS differential capture to reject the known `+0x265`/mesh refresh
+paths and isolate the remaining problem to a downstream consumer layer.
+
+### Changelog summary
+
+Confirmed that the observed ADS correction does not use the inspected primitive
+setter or mesh-assignment path; stable gameplay/cinematic code remains unchanged.
+
+## 2026-09-01 — Close broad camera FOV offset intersection audit
+
+### Scope
+
+- Search current 2.0.4 code for consumers intersecting camera `+0x230`,
+  `+0x234` and `+0x262`.
+- Promote only a small runtime-plausible first-person projection consumer.
+
+### Changed
+
+- Added `02-Research/Ghidra/ghidra-scripts/AuditCameraFirstPersonFovConsumers204.java`.
+- Added `02-Research/Ghidra/reports/camera-first-person-fov-consumer-audit-204.md`.
+- Updated `WEAPON_VIEWMODEL_FOV_POST_CINEMATIC_CAUSAL_TRACE_TASK_PLAN.md` with
+  the bounded scan result.
+
+### Validation and limits
+
+- Read-only Ghidra scan completed against the current program.
+- Found 516 functions with at least two target offsets and 9 functions with all
+  three offsets.
+- All 9 all-three functions were large generic contexts; no compact projection
+  consumer was justified.
+- No runtime artifact or production ASI change was made.
+
+### Completed
+
+- Closed the raw `+0x230/+0x234/+0x262` intersection as insufficient for safe
+  consumer selection.
+
+### Remaining / deferred
+
+- The downstream first-person/viewmodel consumer remains unresolved.
+- Further work must narrow from ADS data-flow or a stronger semantic anchor,
+  without opening a broad renderer search.
+
+### Patch summary
+
+Completed a bounded static consumer triage and rejected raw offset intersection
+as a sufficient hook-selection method.
+
+### Changelog summary
+
+Documented that camera FOV offset intersections remain too generic for a safe
+runtime hook; stable gameplay/cinematic code remains unchanged.
+
+## 2026-09-01 — Audit ADS local call/data flow
+
+### Scope
+
+- Inspect only the validated current 2.0.4 ADS IN/OUT neighborhoods.
+- Classify direct calls, object dereferences, transition math and state writes.
+- Do not build a runtime tracer or alter the stable ASI without a stronger
+  ownership contract.
+
+### Changed
+
+- Added `02-Research/Ghidra/ghidra-scripts/AuditAdsLocalCallChain204.java`.
+- Added `02-Research/Ghidra/ghidra-scripts/RankAdsDirectCallees204.java`.
+- Added `02-Research/Ghidra/ghidra-scripts/DecompileRankedAdsCallees204.java`.
+- Added `02-Research/Ghidra/ghidra-scripts/PrintProgramIdentity204.java`.
+- Added `02-Research/Ghidra/reports/ads-local-callchain-audit-204.md`.
+- Updated `WEAPON_VIEWMODEL_FOV_POST_CINEMATIC_CAUSAL_TRACE_TASK_PLAN.md` with
+  the Batch 9 result.
+
+### Validation and limits
+
+- The read-only Ghidra scripts executed successfully, but the selected Ghidra
+  image was stale relative to the current runtime 2.0.4 executable.
+- Static ADS matches were `RVA 0x6A849C` and `0x6A8639`; current runtime logs
+  resolve the corresponding anchors at different RVAs.
+- Direct-callee ranking and decompilation are invalidated for current 2.0.4
+  address selection.
+- No runtime artifact, production hook or stable ASI change was made.
+
+### Completed
+
+- Detected and explained the RVA discrepancy as a Ghidra image-identity
+  mismatch rather than a function-entry versus hook-instruction offset.
+- Preserved the stale-image findings as historical guidance only.
+
+### Remaining / deferred
+
+- Reopen the ADS local ranking against a Ghidra image matching the current game
+  SHA-256 before selecting any runtime candidate.
+- No runtime follow-up or production implementation is justified from this
+  static batch.
+
+### Patch summary
+
+Added a read-only ADS call-chain audit, then invalidated its candidate ranking
+after reconciling the stale Ghidra image with the current runtime executable.
+
+### Changelog summary
+
+Confirmed that the initial ADS static ranking used a stale image; current-build
+candidate selection remains deferred, and stable gameplay/cinematic code remains
+unchanged.
+
+## 2026-09-02 — Revalidate ADS static analysis on matching 2.0.4 image
+
+### Scope
+
+- Use the canonical `Dump/STALKER2-Ghidra` entry
+  `Stalker2-Win64-Shipping.exe (2.0.4)`.
+- Enforce executable identity before repeating the ADS local audit and ranking.
+- Reconcile current ADS anchors and inspect only the bounded direct-callee set.
+- Do not create a runtime tracer or modify production ASI logic.
+
+### Changed
+
+- Updated `02-Research/Ghidra/ghidra-scripts/RankAdsDirectCallees204.java` to
+  use the current 2.0.4 ADS containing-function entry `RVA 0x6ABB9C`.
+- Updated `02-Research/Ghidra/ghidra-scripts/DecompileRankedAdsCallees204.java`
+  with the current-image top three bounded candidates.
+- Extended `02-Research/Ghidra/reports/ads-local-callchain-audit-204.md` with
+  the matching-image identity header, current ADS slice and current ranking.
+
+### Validation and limits
+
+- Ghidra `.text` block size: `130818560`, matching the current executable.
+- Image base: `0x140000000`, matching the current executable.
+- Current executable SHA-256:
+  `2ECC5D19FE37F97E3F7F2467D652B299B5A47F010FA49FD803A49A4A6930A409`.
+- ADS IN resolved uniquely at `RVA 0x6ABE7E`; ADS OUT resolved uniquely at
+  `RVA 0x6AC01B`.
+- Current ADS containing function is `FUN_1406ABB9C`; the old
+  `FUN_1406A81BA` result is stale-image evidence and remains invalid.
+- Current-image ranking found 13 direct callees. The top three were reviewed;
+  none has sufficient ownership and causal evidence for a hook.
+- Primitive-setter reconciliation is not included in this batch.
+
+### Completed
+
+- Passed the matching-image identity gate for the canonical 2.0.4 Ghidra entry.
+- Revalidated the ADS local call-chain anchor and bounded direct-callee ranking
+  on the correct image.
+- Preserved stale-image provenance instead of replacing the earlier result.
+
+### Remaining / deferred
+
+- Reconcile the current-image primitive setter against the runtime-known
+  `RVA 0x5665FA6` anchor.
+- Revalidate any surviving ADS-state ownership candidate before proposing a
+  bounded runtime trace.
+- No production implementation is justified yet.
+
+### Patch summary
+
+Reopened the ADS static investigation on the canonical matching Steam 2.0.4
+Ghidra image and replaced the invalid stale-image candidate set with a current
+bounded ranking.
+
+### Changelog summary
+
+Corrected the analysis provenance for the ADS research; no stable gameplay or
+ cinematic behavior was changed.
+
+## 2026-09-02 — Complete matching-image production and P1/P2 revalidation
+
+### Scope
+
+- Reconcile the canonical `Dump/STALKER2-Ghidra` project with the Steam 2.0.4
+  executable before interpreting static evidence.
+- Revalidate production-facing cinematic/gameplay contracts and bounded
+  high-potential cinematic alternatives.
+- Do not modify production C++/ASI/INI logic, create a runtime tracer, launch
+  the game or expand into weapon/viewmodel research.
+
+### Changed
+
+- Updated `MATCHING_IMAGE_REVALIDATION_TASK_PLAN.md` through final review.
+- Updated `02-Research/Ghidra/reports/matching-image-revalidation-2026-09-02.md`
+  with fresh current-image identity, contract reconciliation and P1/P2
+  results.
+- Preserved stale-image provenance and corrected the lock note: the leftover
+  lock was caused by an agent-owned headless process, not the user's GUI
+  session.
+
+### Validation and limits
+
+- Canonical `2.0.4` Ghidra entry SHA-256:
+  `2ECC5D19FE37F97E3F7F2467D652B299B5A47F010FA49FD803A49A4A6930A409`.
+- `.text` size: `130818560`; image base: `0x140000000`.
+- ADS IN/OUT anchors matched current runtime RVAs `0x6ABE7E` and `0x6AC01B`.
+- Current ENTER aspect setter uniquely resolved at `RVA 0x6B7CB05`; its
+  local data-flow contains aspect/mode stores but no FOV/projection owner.
+- The generic cinematic helper returned `ENTER_MATCHES=0`; this was reconciled
+  as a stale broad helper pattern, not promoted as an anchor failure.
+- The recorded camera-field intersection contains `516` generic functions; no
+  causal projection consumer was promoted from that non-specific result.
+- No build, runtime tracer or in-game validation was performed in this task.
+
+### Completed
+
+- Matching-image identity gate: PASS.
+- Production safety contracts: PASS within the tested current-image/source
+  contract; no production contract was changed.
+- P1/P2 cinematic alternatives: no concrete native or simpler replacement
+  advantage demonstrated; no branch promoted or reopened.
+- Agent-owned Ghidra process and stale lock were verified absent after
+  analysis.
+
+### Remaining / deferred
+
+- Any runtime candidate trace or production change requires a separate approved
+  task with its own identity gate and validation scope.
+- Weapon/viewmodel causal research remains outside this task.
+
+### Patch summary
+
+Completed the matching-image recovery pass after the stale-Ghidra-image
+incident, confirmed the current production contracts and closed the bounded
+P1/P2 revalidation without changing production behavior.
+
+### Changelog summary
+
+Restored static-evidence provenance for the current 2.0.4 image; no native
+cinematic replacement mechanism was proven, and no production or weapon FOV
+implementation was changed.
+
+## 2026-09-02 — Cross-patch production resolver validation
+
+### Scope
+
+- Apply the unchanged `0.4.0` production resolver contracts to the canonical
+  Steam `2.0.2`, `2.0.3` and `2.0.4` Ghidra entries.
+- Validate identity, uniqueness, gameplay instruction decoding and cinematic
+  aspect/ENTER/EXIT contracts.
+- Do not generalize signatures, modify production code, build/inject an ASI or
+  expand into weapon research.
+
+### Changed
+
+- Added the read-only helper
+  `02-Research/Ghidra/ghidra-scripts/ValidateCurrentProductionResolversAcrossPrograms.java`.
+- Added
+  `02-Research/Ghidra/reports/cross-patch-production-resolver-validation-2026-09-02.md`.
+- Added and completed
+  `CROSS_PATCH_PRODUCTION_RESOLVER_VALIDATION_TASK_PLAN.md`.
+
+### Validation and limits
+
+- Identity `PASS` for all three images; `.text` sizes were `130803712`,
+  `130806784` and `130818560` respectively, with distinct `.text` hashes.
+- Gameplay, cinematic aspect, ENTER and EXIT patterns each matched uniquely on
+  `2.0.2`, `2.0.3` and `2.0.4`.
+- Gameplay decode passed as `MOVSS [RBX+0x30], XMM0` on all three images.
+- Overall Gate A result: `WOULD INSTALL` for all three versions.
+- This is static resolver portability evidence, not runtime injection or
+  in-game validation on the older versions.
+- No production source, ASI or runtime tracer was changed.
+
+### Completed
+
+- Confirmed current production resolver portability across the retained Steam
+  `2.0.2`, `2.0.3` and `2.0.4` images.
+- Confirmed that no Gate B signature generalization is required for this set.
+- Verified the agent-owned Ghidra process exited and the canonical project has
+  no remaining lock file.
+
+### Remaining / deferred
+
+- Future patches still require a fresh identity gate and validation.
+- Runtime validation on older game versions remains unperformed.
+- Weapon/viewmodel research remains a separate bounded task.
+
+### Patch summary
+
+Added a read-only cross-patch Gate A simulation and documented unique resolver
+matches and decode contracts across Steam 2.0.2, 2.0.3 and 2.0.4.
+
+### Changelog summary
+
+Confirmed that the unchanged 0.4.0 resolver architecture is statically
+portable across the three tested Steam images; no production behavior changed.
+
+## 2026-09-02 — Revalidate weapon/viewmodel FOV ownership on canonical 2.0.4
+
+### Scope
+
+- Revalidate primitive setter/MRSD linkage and ADS ownership on the matching
+  Steam 2.0.4 Ghidra image.
+- Re-rank direct ADS callees and inspect bounded camera-field evidence.
+- Do not create a runtime tracer, modify production source/ASI or expand the
+  weapon branch beyond the approved static scope.
+
+### Changed
+
+- Added the read-only helper
+  `02-Research/Ghidra/ghidra-scripts/AuditCurrentWeaponViewmodelOwnership204.java`.
+- Added
+  `02-Research/Ghidra/reports/weapon-viewmodel-fov-revalidation-2026-09-02.md`.
+- Updated `WEAPON_VIEWMODEL_FOV_POST_CINEMATIC_CAUSAL_TRACE_TASK_PLAN.md` with
+  current-image ownership and ADS results.
+
+### Validation and limits
+
+- Canonical 2.0.4 identity passed: executable SHA-256
+  `2ECC5D19FE37F97E3F7F2467D652B299B5A47F010FA49FD803A49A4A6930A409`,
+  `.text` size `130818560`, image base `0x140000000`.
+- Primitive setter `RVA 0x5665FA6` resolved to `FUN_145665FA6`; its current
+  instruction flow compares/writes `+0x265` and jumps to `0x140072660`.
+- The setter has one discovered xref from `FUN_1454B26FE`; weapon/viewmodel
+  ownership of its `this` object remains unproven.
+- ADS resolved to `FUN_1406ABB9C`; 13 direct callees were ranked.
+- Strongest candidate `FUN_1424BE5AE` is a generic interpolation helper with
+  128 callers. No direct callee established a causal weapon/viewmodel
+  projection owner.
+- No build, runtime tracer or in-game validation was performed.
+
+### Completed
+
+- Current primitive setter/MRSD linkage: PASS.
+- Current ADS containing-function and direct-callee ranking: PASS/COMPLETE.
+- Direct primitive/MRSD explanation for the captured ADS correction: CLOSED as
+  non-causal on available evidence.
+
+### Remaining / deferred
+
+- Downstream first-person/viewmodel projection ownership remains unresolved.
+- A future runtime gate requires a specific current-image ownership candidate.
+- No production implementation is justified.
+
+### Patch summary
+
+Revalidated weapon/viewmodel ownership anchors on the correct 2.0.4 image and
+closed the stale-image primitive/MRSD branch without creating a new tracer.
+
+### Changelog summary
+
+Confirmed current primitive setter/MRSD linkage and current ADS ownership, but
+found no bounded native weapon/viewmodel projection candidate.
+
+## 2026-09-02 — Reject AF4FA4 projection branch for post-cinematic weapon correction
+
+### Scope
+
+- Validate the `FUN_140AF4FA4` entry predicate using the existing read-only
+  runtime gate.
+- Record `source+0x25C`, its absolute value, the computed branch and source
+  flags `+0x260/+0x261` across cinematic EXIT and ADS correction.
+- Do not add production behavior or expand into generic renderer analysis.
+
+### Changed
+
+- Updated the existing PRE-only read-only runtime tracer to observe the entry
+  predicate; removed the unused POST-hook path.
+- Added the matching-image predicate audit and updated the downstream consumer
+  report and task plan.
+
+### Validation and limits
+
+- Canonical Steam 2.0.4 identity passed.
+- Runtime capture recorded 1914 PRE events across the cinematic/ADS sequence.
+- `source+0x25C=0`, `abs(+0x25C)=0`, and `predicate=early` for all observed
+  events; `+0x260/+0x261` remained `0x0/0x0`.
+- `source+0x230` and output `+0x30/+0x38` still showed the ADS world-FOV
+  transition.
+- No projection/tanf/atanf path entry was observed; no production ASI was
+  changed.
+
+### Completed
+
+- Rejected `FUN_140AF4FA4` as the causal owner for the captured post-cinematic
+  weapon correction.
+- Preserved the independent world-FOV propagation finding.
+
+### Remaining / deferred
+
+- The downstream first-person/viewmodel correction owner remains unresolved.
+- No new runtime tracer is authorized until a new bounded static candidate is
+  identified.
+
+### Patch summary
+
+Added PRE-only predicate observation and closed the AF4FA4 projection branch on
+current 2.0.4 runtime evidence.
+
+### Changelog summary
+
+Confirmed that the observed ADS weapon correction does not enter the candidate
+consumer's projection-derived path; no production behavior changed.
+
+## 2026-09-02 — Stop local output+0x38 downstream-use audit
+
+### Scope
+
+- Inspect only the local caller tail after `FUN_140AF4022 + 0xAF42A7`.
+- Find direct or obvious local consumers of the validated presentation
+  output/`+0x38` with first-person/viewmodel semantics.
+- Do not scan generic renderer/data-flow, create a runtime tracer or change
+  production behavior.
+
+### Changed
+
+- Added the bounded helper
+  `02-Research/Ghidra/ghidra-scripts/AuditOutput38DownstreamUse204.java`.
+- Added
+  `02-Research/Ghidra/reports/ads-output38-downstream-use-audit-204-2026-09-02.md`.
+- Completed `ADS_OUTPUT38_DOWNSTREAM_USE_TASK_PLAN.md`.
+
+### Validation and limits
+
+- Canonical 2.0.4 identity passed.
+- No direct `RBX+0x38` read or write was found after the consumer call.
+- No direct callee was established as a first-person/viewmodel presentation
+  owner.
+- `RAX/RCX+0x38` accesses were not tied to the validated output object.
+- No runtime tracer or production ASI change was made.
+
+### Completed
+
+- Bounded output+0x38 downstream-use theory stopped as `UNRESOLVED`.
+- Generic renderer/data-flow expansion was explicitly not performed.
+
+### Remaining / deferred
+
+- The downstream weapon/viewmodel owner remains unresolved and is deferred.
+- Dialogue zoom is the next independent research scope.
+
+### Patch summary
+
+Audited the local presentation-output tail and stopped without promoting an
+unsupported downstream consumer.
+
+### Changelog summary
+
+No local current-2.0.4 first-person/viewmodel consumer was identified; no
+production behavior changed.
+
+---
+
+## 2026-09-03 — Dialogue zoom production promotion
+
+### Scope
+
+- Promote the validated Adaptive and optical half-strength dialogue model into
+  the production dialogue subsystem.
+- Keep the existing resolver boundary, cinematic isolation, ADS specificity,
+  gameplay and cinematic subsystems unchanged.
+- Use `DialogueCycle=F10` as the production default; custom bindings remain
+  supported.
+
+### Changed
+
+- Updated `src/experimental_cinematic_21_9_combined_fix_204.cpp`.
+- Updated the unified test/build script and public configuration examples.
+- Added `DIALOGUE_ZOOM_PRODUCTION_PROMOTION_TASK_PLAN.md`.
+- Production policy cycle is now `Native → Adaptive → Reduced → Disabled → Native`.
+- `Reduced` now uses the promoted optical half-strength model.
+- Promoted the validated EXIT anchor/recovery behavior.
+- Removed feasibility-only `OpticalReduced` and EXIT diagnostic instrumentation
+  from the production build path.
+
+### Validation and limits
+
+- Build succeeded for the production candidate.
+- `git diff --check` passed with only existing line-ending warnings.
+- Canonical Steam 2.0.4 runtime identity passed:
+  `gameSha256=2ECC5D19FE37F97E3F7F2467D652B299B5A47F010FA49FD803A49A4A6930A409`.
+- Runtime log confirmed all four policies, custom hotkey cycling, persistence,
+  sequential dialogue recovery and cinematic/gameplay hook installation.
+- User visually confirmed smooth ENTER/EXIT behavior for all four policies.
+- Runtime coverage is the tested Steam 2.0.4 scenarios; future patches and
+  untested game states remain outside this result.
+
+### Completed
+
+- Dialogue production core promotion: PASS.
+- Native, Adaptive, Reduced and Disabled: PASS.
+- Sequential dialogue cycles and baseline recovery: PASS.
+- Hotkey cycle and persistence: PASS.
+- Existing gameplay/cinematic behavior: no regression observed.
+
+### Remaining / deferred
+
+- Final release archive/package review for v0.5.0 remains.
+- Runtime compatibility on Steam 2.0.2/2.0.3 remains statically portable but
+  not runtime-validated.
+
+### Patch summary
+
+Promoted the validated FOV-aware optical dialogue zoom model and smooth EXIT
+recovery into the production dialogue path.
+
+### Changelog summary
+
+Added Adaptive dialogue zoom, changed Reduced to optical half-strength behavior,
+and preserved the native dialogue lifecycle with smooth recovery.

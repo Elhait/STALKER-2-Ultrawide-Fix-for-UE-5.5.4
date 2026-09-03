@@ -1,6 +1,6 @@
 # STALKER 2 Ultrawide Fix for UE 5.5.4 — Gameplay, Cinematics & Custom Framing
 
-## Version 0.4.0
+## Version 0.5.0
 
 Source for `STALKER2UltrawideFix.asi`, a unified gameplay and cinematic ultrawide fix for **S.T.A.L.K.E.R. 2: Heart of Chornobyl**. The current implementation is validated against the Steam game build tested with Unreal Engine `5.5.4`.
 
@@ -13,6 +13,8 @@ Source for `STALKER2UltrawideFix.asi`, a unified gameplay and cinematic ultrawid
 - Uses the game's runtime camera aspect rather than desktop dimensions.
 - Dynamically follows `Auto` aspect changes during the same game session without requiring a restart.
 - Supports custom cinematic framing independently of the physical display: `Auto`, `Native`, `16:9`, `21:9` or `32:9`.
+- Provides FOV-aware dialogue zoom modes: `Native`, `Adaptive`, `Reduced` and `Disabled`.
+- Optional runtime hotkeys select the policy for the next cinematic or dialogue; they are disabled by default.
 - Creates `STALKER2UltrawideFix.ini` automatically when it is missing.
 - Resolves gameplay and cinematic hook locations through guarded signatures and refuses safely when validation is ambiguous or fails.
 
@@ -38,9 +40,32 @@ Enabled=true
 [Cinematics]
 ; Auto, Native, 16:9, 21:9, 32:9
 AspectRatio=Auto
+
+[Dialogue]
+; Native   - keep the game's original dialogue zoom, currently targeting 70°.
+; Adaptive - preserve the native optical zoom strength relative to the current gameplay FOV.
+; Reduced  - apply half of the Adaptive optical zoom strength.
+; Disabled - keep the current gameplay FOV during dialogue.
+Zoom=Reduced
+
+[Hotkeys]
+; Optional runtime controls for quickly testing different settings without restarting the game.
+; Intended mainly for comparing modes and finding a preferred configuration; disable for normal use.
+; Supported keys: F1-F12, 0-9 and A-Z.
+Enabled=false
+
+; Key used to cycle the cinematic mode for the next cinematic.
+; Auto -> Native -> 16:9 -> 21:9 -> 32:9 -> Auto.
+; Does not affect a cinematic that is already playing.
+CinematicCycle=F9
+
+; Key used to cycle the dialogue zoom mode for the next dialogue.
+; Native -> Adaptive -> Reduced -> Disabled -> Native.
+; Does not affect a dialogue that is already in progress.
+DialogueCycle=F10
 ```
 
-`Auto` follows the game's runtime camera aspect and applies matching Hor+ FOV. It also updates when the game resolution changes during the same session. `Native` leaves the game's cinematic aspect and FOV behavior untouched. Forced modes provide custom cinematic framing and matching FOV; for example, forcing `32:9` on a 16:9 display produces cinematic letterbox bars. Configuration changes take effect after restarting the game.
+`Auto` follows the game's runtime camera aspect and applies matching Hor+ FOV. It also updates when the game resolution changes during the same session. `Native` leaves the game's cinematic aspect and FOV behavior untouched. Forced modes provide custom cinematic framing and matching FOV; for example, forcing `32:9` on a 16:9 display produces cinematic letterbox bars. Restart the game after manually editing the INI file. Runtime hotkey selections do not require a restart and apply to the next corresponding cinematic or dialogue.
 
 ## Build requirements
 
@@ -95,6 +120,11 @@ physical display aspect ratio. These examples show `Auto` at 16:9, and forced
 Copyright for this project is held by Elhait and released under MIT. Some helper and ASI-scaffolding portions are derived from Lyall's MIT-licensed STALKER2Tweak; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 This project is independent and is not a release of Lyall's STALKER2Tweak.
+
+The [WIDEBOY Fixes by BigChenga](https://www.nexusmods.com/stalker2heartofchornobyl/mods/2337)
+were used as a research reference for dialogue/camera FOV behavior. The
+dialogue implementation in this project was independently reverse engineered
+and runtime validated.
 
 ## Support development
 
