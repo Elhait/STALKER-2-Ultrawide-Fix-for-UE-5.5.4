@@ -1,6 +1,6 @@
 # Release Notes — 0.5.0
 
-## STALKER2UltrawideFix.asi
+## STALKER2CameraTweaks.asi
 
 Version 0.5.0 extends the unified configurable ASI with FOV-aware dialogue zoom control.
 
@@ -12,7 +12,7 @@ Version 0.5.0 extends the unified configurable ASI with FOV-aware dialogue zoom 
 - Cinematic aspect correction using the game's runtime camera aspect.
 - Hor+ cinematic FOV correction at the live cinematic consumer boundary.
 - Custom cinematic framing modes: `Auto`, `Native`, `16:9`, `21:9` and `32:9`.
-- Automatic creation of `STALKER2UltrawideFix.ini` with safe defaults.
+- Automatic creation of `STALKER2CameraTweaks.ini` with safe defaults.
 - Startup SHA-256 logging for the loaded ASI and game executable.
 - Guarded signature resolution for gameplay and cinematic boundaries, with fail-closed behavior when signatures or instruction validation do not match.
 - Dialogue zoom modes: `Native`, `Adaptive`, `Reduced` and `Disabled`.
@@ -73,7 +73,7 @@ DialogueCycle=F10
 
 ## Upgrade notes
 
-Remove the previous `STALKER2GameplayAspectFix.asi` and its old INI/log before installing `STALKER2UltrawideFix.asi`. Copy the new ASI and INI into the game's `Stalker2\\Binaries\\Win64` directory and restart the game.
+Remove previous `STALKER2UltrawideFix.asi`, `STALKER2GameplayAspectFix.asi` and their old INI/log files before installing `STALKER2CameraTweaks.asi`. Copy the new ASI and INI into the game's `Stalker2\\Binaries\\Win64` directory and restart the game.
 
 ## Previous version — 0.1.1
 
@@ -90,6 +90,6 @@ included:
 
 The 0.1.1 release intentionally did not include cinematic aspect correction,
 cinematic FOV correction, custom cinematic framing or viewmodel FOV changes.
-It has been superseded by the unified `STALKER2UltrawideFix.asi` in version
+It has been superseded by the unified `STALKER2CameraTweaks.asi` in version
 0.3.0. The older historical 0.1.0 archive remains separate and targets the
 earlier Steam 2.0.2 release.

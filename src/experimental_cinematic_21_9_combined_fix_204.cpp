@@ -64,6 +64,7 @@ namespace
     constexpr std::size_t kDialogueBoundaryHookOffset = 9;
     constexpr float kDialogueRecoveryEpsilon = 1.0f;
     constexpr float kDialogueTransformEpsilon = 0.01f;
+    constexpr float kDialogueContextFovJump = 5.0f;
 
     // These signatures describe the 2.0.3 -> 2.0.4 transition topology, not
     // fixed addresses. Relative call displacements and the ENTER RIP-relative
@@ -93,7 +94,7 @@ namespace
     enum class CinematicAspectPolicy : std::uint32_t { Auto, Native, Forced16x9, Forced21x9, Forced32x9 };
 
     enum class DialogueZoomPolicy : std::uint32_t { Native, Adaptive, Reduced, Disabled };
-    enum class DialoguePhase : std::uint32_t { Inactive, Active, Exiting };
+    enum class DialoguePhase : std::uint32_t { Inactive, Candidate, Active, Exiting };
 
     struct FeatureConfig
     {
@@ -130,11 +131,21 @@ namespace
     SafetyHookMid g_dialogueBoundaryHook;
     std::atomic<float> g_lastObservedAspect{kNativeAspect};
     std::atomic<std::uintptr_t> g_lastAutoRestoreSource{};
+    std::atomic<std::uintptr_t> g_lastGameplayCameraSource{};
+    std::atomic<float> g_lastGameplayCameraFov{std::numeric_limits<float>::quiet_NaN()};
     std::mutex g_dialogueMutex;
     DialoguePhase g_dialoguePhase{DialoguePhase::Inactive};
     float g_dialogueBaseline = std::numeric_limits<float>::quiet_NaN();
     float g_dialoguePrevious = std::numeric_limits<float>::quiet_NaN();
     float g_dialogueExitIncomingStart{std::numeric_limits<float>::quiet_NaN()};
+
+    void ResetDialogueRuntimeState()
+    {
+        g_dialoguePhase = DialoguePhase::Inactive;
+        g_dialogueBaseline = std::numeric_limits<float>::quiet_NaN();
+        g_dialoguePrevious = std::numeric_limits<float>::quiet_NaN();
+        g_dialogueExitIncomingStart = std::numeric_limits<float>::quiet_NaN();
+    }
 #ifdef GAMEPLAY_ONE_SHOT_CINEMATIC_TRIGGER
     std::atomic_bool g_oneShotCinematicTriggerArmed{false};
 #endif
@@ -171,6 +182,10 @@ namespace
     };
     ResolutionSnapshot g_lastResolutionSnapshot{};
 #endif
+#ifdef FOV_SETTINGS_TRACE_DIAGNOSTIC
+    float g_lastLoggedGameplayFov = std::numeric_limits<float>::quiet_NaN();
+    std::uintptr_t g_lastLoggedGameplayFovSource{};
+#endif
 
     const char* ReplayStateName(ReplayState state)
     {
@@ -200,6 +215,24 @@ namespace
         (message << ... << args);
         g_logger->info("{}", message.str());
     }
+
+#ifdef FOV_SETTINGS_TRACE_DIAGNOSTIC
+    void LogGameplayFovChange(std::uintptr_t source, float fov)
+    {
+        const auto coordinator = g_coordinator.load(std::memory_order_acquire);
+        const auto replayState = g_state.load(std::memory_order_acquire);
+        if (source != g_lastLoggedGameplayFovSource ||
+            !std::isfinite(g_lastLoggedGameplayFov) ||
+            std::fabs(fov - g_lastLoggedGameplayFov) > 0.01f) {
+            Log("Gameplay FOV trace: source=0x", std::hex, source, std::dec,
+                " primaryFOV=", fov,
+                " coordinator=", static_cast<std::uint32_t>(coordinator),
+                " replayState=", static_cast<std::uint32_t>(replayState), ".");
+            g_lastLoggedGameplayFovSource = source;
+            g_lastLoggedGameplayFov = fov;
+        }
+    }
+#endif
 
     bool ComputeSha256(const std::filesystem::path& path, std::string& result)
     {
@@ -389,48 +422,6 @@ namespace
         return g_runtimeCinematicPolicy.load(std::memory_order_acquire) != CinematicAspectPolicy::Native;
     }
 
-    bool RemoveObsoleteCinematicFovSetting(const std::filesystem::path& path)
-    {
-        std::ifstream input(path);
-        if (!input) return false;
-
-        constexpr char kGeneratedFovComment[] =
-            "; Apply Hor+ FOV correction for the selected aspect.";
-        std::vector<std::string> lines;
-        std::string line;
-        while (std::getline(input, line)) lines.push_back(std::move(line));
-
-        bool inCinematics = false;
-        bool removed = false;
-        std::vector<std::string> migrated;
-        migrated.reserve(lines.size());
-        for (const auto& original : lines) {
-            const auto trimmed = Trim(original);
-            if (trimmed.size() >= 2 && trimmed.front() == '[' && trimmed.back() == ']')
-                inCinematics = Trim(trimmed.substr(1, trimmed.size() - 2)) == "Cinematics";
-
-            const auto separator = trimmed.find('=');
-            const bool obsoleteFovSetting = inCinematics && separator != std::string::npos &&
-                Trim(trimmed.substr(0, separator)) == "FovCorrection";
-            if (obsoleteFovSetting) {
-                if (!migrated.empty() && Trim(migrated.back()) == kGeneratedFovComment)
-                    migrated.pop_back();
-                removed = true;
-                continue;
-            }
-            migrated.push_back(original);
-        }
-
-        if (!removed) return false;
-        std::ofstream output(path, std::ios::out | std::ios::trunc);
-        if (!output) return false;
-        for (std::size_t index = 0; index < migrated.size(); ++index) {
-            output << migrated[index];
-            if (index + 1 < migrated.size()) output << '\n';
-        }
-        return static_cast<bool>(output);
-    }
-
     bool SynchronizeManagedConfigTemplate(const std::filesystem::path& path)
     {
         std::ifstream input(path);
@@ -511,8 +502,9 @@ namespace
         bool changed = false;
         for (const auto& original : source) {
             const auto trimmed = Trim(original);
-            if (trimmed == "; STALKER 2 Ultrawide Fix v0.4.0") {
-                output.emplace_back("; STALKER 2 Ultrawide Fix v0.5.0");
+            if (trimmed == "; STALKER 2 Ultrawide Fix v0.4.0" ||
+                trimmed == "; STALKER 2 Ultrawide Fix v0.5.0") {
+                output.emplace_back("; STALKER 2 Ultrawide and Camera Tweaks v0.5.0");
                 changed = true;
                 continue;
             }
@@ -647,7 +639,7 @@ namespace
         if (!std::filesystem::exists(path)) {
             std::ofstream created(path, std::ios::out | std::ios::trunc);
             if (!created) return false;
-            created << "; STALKER 2 Ultrawide Fix v0.5.0\n"
+            created << "; STALKER 2 Ultrawide and Camera Tweaks v0.5.0\n"
                 << "; Author: Elhait\n"
                 << "; GitHub: https://github.com/Elhait/STALKER-2-Ultrawide-Fix-for-UE-5.5.4\n"
                 << "; Nexus Mods: https://www.nexusmods.com/stalker2heartofchornobyl/mods/2416\n"
@@ -686,10 +678,6 @@ namespace
                 << "DialogueCycle=F10\n";
             return static_cast<bool>(created);
         }
-
-        const bool migrated = RemoveObsoleteCinematicFovSetting(path);
-        if (migrated)
-            Log("Config migration: removed obsolete Cinematics.FovCorrection setting.");
 
         if (SynchronizeManagedConfigTemplate(path))
             Log("Config template synchronized: updated managed descriptions and hotkey settings.");
@@ -1128,6 +1116,25 @@ namespace
         g_lastCameraSource.store(source, std::memory_order_release);
 #endif
         const float fov = context.xmm0.f32[0];
+        const auto previousSource = g_lastGameplayCameraSource.exchange(source, std::memory_order_acq_rel);
+        const float previousFov = g_lastGameplayCameraFov.exchange(fov, std::memory_order_acq_rel);
+        const bool sourceChanged = previousSource != 0 && previousSource != source;
+        const bool materialFovJump = previousSource == source && std::isfinite(previousFov) &&
+            std::isfinite(fov) && std::fabs(fov - previousFov) > kDialogueContextFovJump;
+        if (sourceChanged || materialFovJump) {
+            std::lock_guard dialogueLock(g_dialogueMutex);
+            if (g_dialoguePhase != DialoguePhase::Inactive) {
+                Log("Dialogue runtime invalidated by gameplay camera context change: sourceChanged=",
+                    sourceChanged, " previousSource=0x", std::hex, previousSource,
+                    " source=0x", source, std::dec, " previousFOV=", previousFov,
+                    " currentFOV=", fov, ". Native pass-through until a new descent.");
+                ResetDialogueRuntimeState();
+            }
+        }
+#ifdef FOV_SETTINGS_TRACE_DIAGNOSTIC
+        if (std::isfinite(fov) && fov > 1.0f && fov < 179.0f)
+            LogGameplayFovChange(source, fov);
+#endif
         float aspect = 0.0f;
         std::uint8_t flags = 0;
         if (!SafeRead(source + kAspectOffset, aspect) || !SafeRead(source + kFlagsOffset, flags)) return;
@@ -1194,6 +1201,10 @@ namespace
         if (state == ReplayState::Complete && IsUltrawideAspect(aspect) && flags == 0x4) {
             // Cutscenes can rebuild the gameplay camera and restore the same broken
             // Auto state seen during startup. Arm the proven two-pass transition again.
+            {
+                std::lock_guard dialogueLock(g_dialogueMutex);
+                ResetDialogueRuntimeState();
+            }
 #ifdef COMBINED_GAMEPLAY_DIAGNOSTIC
             if (g_suppressRearmAfterManualRestore.exchange(false, std::memory_order_acq_rel)) {
                 Log("Combined diagnostic: manual native-aspect restore observed; automatic re-arm suppressed.");
@@ -1500,18 +1511,12 @@ namespace
 
         std::lock_guard lock(g_dialogueMutex);
         if (g_coordinator.load(std::memory_order_acquire) != CoordinatorState::Gameplay) {
-            g_dialoguePhase = DialoguePhase::Inactive;
-            g_dialogueBaseline = std::numeric_limits<float>::quiet_NaN();
-            g_dialoguePrevious = std::numeric_limits<float>::quiet_NaN();
-            g_dialogueExitIncomingStart = std::numeric_limits<float>::quiet_NaN();
+            ResetDialogueRuntimeState();
             return;
         }
         const auto policy = g_runtimeDialoguePolicy.load(std::memory_order_acquire);
         if (policy == DialogueZoomPolicy::Native) {
-            g_dialoguePhase = DialoguePhase::Inactive;
-            g_dialogueBaseline = std::numeric_limits<float>::quiet_NaN();
-            g_dialoguePrevious = std::numeric_limits<float>::quiet_NaN();
-            g_dialogueExitIncomingStart = std::numeric_limits<float>::quiet_NaN();
+            ResetDialogueRuntimeState();
             return;
         }
         const float previous = g_dialoguePrevious;
@@ -1521,16 +1526,22 @@ namespace
         if (g_dialoguePhase == DialoguePhase::Inactive) {
             if (!std::isfinite(g_dialogueBaseline)) {
                 g_dialogueBaseline = incoming;
-                g_dialoguePhase = DialoguePhase::Active;
+                g_dialoguePhase = DialoguePhase::Candidate;
                 g_dialogueExitIncomingStart = std::numeric_limits<float>::quiet_NaN();
-                Log("Dialogue lifecycle started: baselineG=", g_dialogueBaseline,
-                    " policy=", DialogueZoomPolicyName(policy), ".");
+                Log("Dialogue candidate captured: provisionalBaselineG=", g_dialogueBaseline,
+                    " policy=", DialogueZoomPolicyName(policy), ". No transform applied.");
             } else if (descending) {
                 g_dialogueBaseline = previous;
                 g_dialoguePhase = DialoguePhase::Active;
                 g_dialogueExitIncomingStart = std::numeric_limits<float>::quiet_NaN();
                 Log("Dialogue lifecycle restarted after gameplay descent: baselineG=", g_dialogueBaseline, ".");
             }
+        } else if (g_dialoguePhase == DialoguePhase::Candidate && descending) {
+            g_dialogueBaseline = previous;
+            g_dialoguePhase = DialoguePhase::Active;
+            g_dialogueExitIncomingStart = std::numeric_limits<float>::quiet_NaN();
+            Log("Dialogue lifecycle started after confirmed native descent: baselineG=", g_dialogueBaseline,
+                " policy=", DialogueZoomPolicyName(policy), ".");
         } else if (g_dialoguePhase == DialoguePhase::Active && ascending) {
             g_dialoguePhase = DialoguePhase::Exiting;
             g_dialogueExitIncomingStart = incoming;
@@ -1542,8 +1553,7 @@ namespace
             std::isfinite(g_dialogueBaseline) &&
             std::fabs(incoming - g_dialogueBaseline) <= kDialogueRecoveryEpsilon) {
             Log("Dialogue lifecycle recovered: baselineG=", g_dialogueBaseline, ". Native recovery complete.");
-            g_dialoguePhase = DialoguePhase::Inactive;
-            g_dialogueExitIncomingStart = std::numeric_limits<float>::quiet_NaN();
+            ResetDialogueRuntimeState();
             output = incoming;
         }
         else if ((policy == DialogueZoomPolicy::Adaptive || policy == DialogueZoomPolicy::Reduced) &&
@@ -1609,6 +1619,10 @@ namespace
             const float delta = std::fabs(currentFov - targetFov);
             if (flags == 0x04 && std::isfinite(currentFov) && std::isfinite(targetFov) && delta <= kRecoveryEpsilon) {
                 g_coordinator.store(CoordinatorState::Gameplay, std::memory_order_release);
+                {
+                    std::lock_guard dialogueLock(g_dialogueMutex);
+                    ResetDialogueRuntimeState();
+                }
                 Log("Global coordinator: native recovery complete; delta=", delta,
                     " target=", targetFov, " current=", currentFov,
                     ". Same writer invocation returned without replay.");
@@ -1726,12 +1740,12 @@ namespace
         WCHAR modulePath[MAX_PATH]{};
         GetModuleFileNameW(g_module, modulePath, MAX_PATH);
         const auto moduleDirectory = std::filesystem::path(modulePath).remove_filename();
-        const auto logPath = moduleDirectory / "STALKER2UltrawideFix.log";
-        const auto configPath = moduleDirectory / "STALKER2UltrawideFix.ini";
+        const auto logPath = moduleDirectory / "STALKER2CameraTweaks.log";
+        const auto configPath = moduleDirectory / "STALKER2CameraTweaks.ini";
         g_configPath = configPath;
         std::ofstream(logPath, std::ios::out | std::ios::trunc).close();
         try {
-            g_logger = spdlog::basic_logger_mt("STALKER2UltrawideFix", logPath.string(), true);
+            g_logger = spdlog::basic_logger_mt("STALKER2CameraTweaks", logPath.string(), true);
             g_logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] %v");
             g_logger->flush_on(spdlog::level::info);
         } catch (...) { return 0; }

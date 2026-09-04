@@ -1,4 +1,4 @@
-# STALKER2UltrawideFix — Reusable Release Preparation and Publishing Playbook
+# STALKER 2 Ultrawide and Camera Tweaks — Reusable Release Preparation and Publishing Playbook
 
 This is the canonical reusable release-preparation and publication reference
 for the project. It is a permanent process document, not a release-specific
@@ -165,6 +165,17 @@ cross-patch validation, known limitations, experimental/deferred work and
 actually supported game versions. `TESTING_AND_RESEARCH.md` must match the
 completed plans, reports and runtime evidence of the current cycle.
 
+`README.md` is a GitHub/repository-facing Markdown document. `NEXUS_DESCRIPTION.md`
+is a publication source for the Nexus Mods Description field: preserve the
+formatting conventions of the current live Nexus description, including its
+heading style, emphasis, links, lists, spacing and configuration/code blocks.
+Do not reformat the Nexus source merely to make it resemble GitHub Markdown.
+The `.md` filename does not require GitHub Markdown when the target publication
+platform uses Nexus-compatible BBCode such as `[b]`, `[list]`, `[code]` and
+`[url]`. Update the existing Nexus presentation incrementally for each release;
+keep detailed reverse-engineering evidence in `TESTING_AND_RESEARCH.md` and
+research reports, not in the user-facing Nexus description.
+
 Validation:
 
 - [ ] Every completed release feature is represented.
@@ -202,8 +213,8 @@ E:\Work\Slaker2 mods\01-Projects\STALKER-2-Ultrawide-Fix-for-UE-5.5.4\release-as
 
 Normally include only:
 
-- final production `STALKER2UltrawideFix.asi`;
-- `STALKER2UltrawideFix.ini`;
+- final production `STALKER2CameraTweaks.asi`;
+- `STALKER2CameraTweaks.ini`;
 - `README.md`;
 - `LICENSE.md`;
 - `THIRD_PARTY_NOTICES.md`.

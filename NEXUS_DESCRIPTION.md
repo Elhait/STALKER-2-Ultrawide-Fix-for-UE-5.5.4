@@ -1,233 +1,153 @@
-# STALKER 2 Ultrawide Fix for UE 5.5.4 — Gameplay, Cinematics & Custom Framing
+STALKER 2 Ultrawide and Camera Tweaks for UE 5.5.4
+Version 0.5.0
 
-## Version 0.5.0
+[b]ABOUT[/b]
 
-**Defender notice:** Microsoft reviewed the release binary and classified it as
-**“Not malware.”** If an old detection remains, update Microsoft Defender
-security intelligence and rescan the file.
+A unified ultrawide, cinematic and camera/FOV fix for S.T.A.L.K.E.R. 2: Heart of Chornobyl on Steam.
 
-Created and maintained by [Elhait](https://github.com/Elhait/STALKER-2-Ultrawide-Fix-for-UE-5.5.4).
+The mod corrects gameplay camera behavior on 21:9 and 32:9 displays, fixes cinematic aspect ratio and Hor+ FOV, adds custom cinematic framing, and provides FOV-aware dialogue zoom controls.
 
-## About
+[b]COMPATIBILITY WITH CAMERA / FOV MODS[/b]
 
-`STALKER2UltrawideFix.asi` is a unified gameplay and cinematic ultrawide fix
-for the Steam version of **S.T.A.L.K.E.R. 2: Heart of Chornobyl**. It restores
-the correct gameplay camera transition on ultrawide displays, corrects
-cinematic aspect and FOV behavior, and adds optional custom cinematic framing.
+Compatibility with other mods that modify the game's camera, FOV, dialogue zoom, cinematic framing, aspect-ratio camera behavior, or related camera state is not guaranteed.
 
-The fix uses guarded signature resolution rather than relying only on fixed
-addresses. If a required signature or instruction validation is missing,
-ambiguous or incompatible, the ASI refuses to install that path safely.
+Bug reports must be reproduced with STALKER2CameraTweaks as the only installed camera/FOV-related mod. Other unrelated mods are fine unless they modify the same camera systems.
 
-Custom framing also allows users to deliberately choose 16:9, 21:9 or 32:9
-cinematic presentation independently of their display aspect ratio.
+[b]FEATURES[/b]
 
-Version 0.5.0 also provides FOV-aware dialogue zoom modes: `Native`,
-`Adaptive`, `Reduced` and `Disabled`. Optional runtime hotkeys can select the
-policy for the next cinematic or dialogue and are disabled by default.
+[list]
+[*]Fixes gameplay aspect transitions on 21:9 and 32:9.
+[*]Automatically re-arms after gameplay camera rebuilds, including death and load.
+[*]Preserves the selected gameplay FOV.
+[*]Corrects cinematic aspect ratio using the game's runtime camera state.
+[*]Applies Hor+ cinematic FOV correction.
+[*]Supports custom cinematic framing: Auto, Native, 16:9, 21:9 and 32:9.
+[*]Allows 16:9 users to preview wider cinematic framing with letterbox bars.
+[*]Adds FOV-aware dialogue zoom: Native, Adaptive, Reduced and Disabled.
+[*]Creates and synchronizes the INI configuration automatically.
+[*]Uses guarded signature resolution and fails safely when validation does not pass.
+[/list]
 
-`Native` keeps the game's original dialogue zoom, currently targeting `70°`.
-`Adaptive` preserves that native optical zoom strength relative to the actual
-gameplay FOV. `Reduced` applies half of the Adaptive optical effect, while
-`Disabled` keeps the gameplay FOV during dialogue. The native transition timing
-is preserved, including smooth recovery after dialogue EXIT.
+[b]CUSTOM CINEMATIC FRAMING[/b]
 
-## Support development
+The cinematic framing can be selected independently from the physical display:
 
-This mod is the result of extensive reverse engineering, runtime tracing,
-implementation and testing across multiple game builds. The full development
-process and the work completed for each stage are available here:
+[list]
+[*]Auto - follows the game's current runtime camera aspect.
+[*]Native - leaves the game's original cinematic aspect and FOV behavior untouched.
+[*]16:9 - forces 16:9 cinematic framing.
+[*]21:9 - forces 21:9 cinematic framing.
+[*]32:9 - forces 32:9 cinematic framing.
+[/list]
 
-- [Testing and research history](https://github.com/Elhait/STALKER-2-Ultrawide-Fix-for-UE-5.5.4/blob/main/TESTING_AND_RESEARCH.md)
-- [Project backlog and completed tasks](https://github.com/Elhait/STALKER-2-Ultrawide-Fix-for-UE-5.5.4/tree/main/backlog)
+For example, forcing 32:9 on a 16:9 display produces a wider cinematic presentation with black bars above and below. The cinematic FOV is handled automatically for the selected framing policy.
 
-If this mod helped you and you would like to support future updates:
+[b]DIALOGUE ZOOM[/b]
 
-- [Ko-fi](https://ko-fi.com/elhait)
-- [Donatello](https://donatello.to/Elhait)
+Version 0.5.0 adds dialogue zoom that adapts to the actual gameplay FOV:
 
-Thank you for your support.
+[list]
+[*]Native - keeps the game's original dialogue zoom, currently targeting 70 degrees.
+[*]Adaptive - preserves the game's native optical zoom strength relative to the current gameplay FOV.
+[*]Reduced - applies half of the Adaptive optical zoom strength. This is the default mode.
+[*]Disabled - keeps the gameplay FOV during dialogue.
+[/list]
 
-## Features
+The native dialogue transition timing is preserved, including smooth recovery when leaving dialogue.
 
-- Fixes the initial 21:9 and 32:9 gameplay camera state.
-- Re-arms automatically after gameplay camera rebuilds, including death/load.
-- Preserves the player's in-game gameplay FOV setting.
-- Corrects cinematic aspect using the game's runtime camera aspect instead of
-  desktop dimensions.
-- Applies Hor+ FOV correction to cinematic transitions.
-- Adds custom cinematic framing modes: `Auto`, `Native`, `16:9`, `21:9` and
-  `32:9`.
-- Allows 16:9 users to preview wider cinematic framing with letterbox bars.
-- Adds FOV-aware dialogue zoom modes: `Native`, `Adaptive`, `Reduced` and
-  `Disabled`, with lifecycle-aware ENTER/EXIT transitions.
-- Optional runtime hotkeys select the policy for the next cinematic or dialogue
-  and are disabled by default.
-- Creates the configuration file automatically when it is missing.
-- Writes the loaded mod and game executable SHA-256 values to the startup log
-  for easier support and version verification.
+[b]CONFIGURATION[/b]
 
-## Configuration
+The mod automatically creates STALKER2CameraTweaks.ini beside the game executable.
 
-The ASI creates `STALKER2UltrawideFix.ini` beside the game executable on first
-launch. The default configuration is:
+Default configuration:
 
-```ini
+[code]
 [Gameplay]
 Enabled=true
 
 [Cinematics]
-; Auto, Native, 16:9, 21:9, 32:9
 AspectRatio=Auto
 
 [Dialogue]
-; Native   - keep the game's original dialogue zoom, currently targeting 70°.
-; Adaptive - preserve the native optical zoom strength relative to the current gameplay FOV.
-; Reduced  - apply half of the Adaptive optical zoom strength.
-; Disabled - keep the current gameplay FOV during dialogue.
 Zoom=Reduced
 
 [Hotkeys]
-; Optional runtime controls for quickly testing different settings without restarting the game.
-; Intended mainly for comparing modes and finding a preferred configuration; disable for normal use.
-; Supported keys: F1-F12, 0-9 and A-Z.
 Enabled=false
-
-; Key used to cycle the cinematic mode for the next cinematic.
-; Auto -> Native -> 16:9 -> 21:9 -> 32:9 -> Auto.
-; Does not affect a cinematic that is already playing.
 CinematicCycle=F9
-
-; Key used to cycle the dialogue zoom mode for the next dialogue.
-; Native -> Adaptive -> Reduced -> Disabled -> Native.
-; Does not affect a dialogue that is already in progress.
 DialogueCycle=F10
-```
+[/code]
 
-`Gameplay.Enabled=false` disables the gameplay aspect correction while leaving
-cinematic options available.
+Manual INI changes require a game restart. Optional runtime hotkeys are intended mainly for testing and comparing settings; they are disabled by default. CinematicCycle selects the mode for the next cinematic, and DialogueCycle selects the mode for the next dialogue. An active cinematic or dialogue is not rebuilt after a hotkey press.
 
-`AspectRatio=Auto` follows the game's current runtime camera aspect and applies
-matching Hor+ FOV. `Native` leaves the game's cinematic aspect and FOV behavior
-untouched. The forced modes select the cinematic framing independently of the
-physical display:
+Supported hotkey bindings: F1-F12, 0-9 and A-Z.
 
-- `16:9` — forces 16:9 cinematic framing.
-- `21:9` — 21:9 cinematic framing.
-- `32:9` — 32:9 cinematic framing.
+[b]REQUIREMENTS[/b]
 
-For example, forcing `32:9` on a 16:9 display produces a wider cinematic frame
-with black bars above and below and matching FOV. Restart the game after
-manually editing the INI file. Runtime hotkey selections do not require a
-restart and apply to the next corresponding cinematic or dialogue.
+[list]
+[*]Steam version of S.T.A.L.K.E.R. 2: Heart of Chornobyl.
+[*][url=https://github.com/ThirteenAG/Ultimate-ASI-Loader]Ultimate ASI Loader (x64)[/url], with dsound.dll placed in Stalker2\Binaries\Win64.
+[*]Tested game build: Steam 2.0.4.
+[*]Unreal Engine target: 5.5.4.
+[/list]
 
-## Requirements
+[b]INSTALLATION[/b]
 
-- Steam version of S.T.A.L.K.E.R. 2: Heart of Chornobyl.
-- Game build tested: `2.0.4`.
-- Unreal Engine target: `5.5.4`.
-- [Ultimate ASI Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader)
-  installed as `dsound.dll`.
+[list=1]
+[*]Install Ultimate ASI Loader and place dsound.dll in Stalker2\Binaries\Win64.
+[*]Remove old STALKER2UltrawideFix.asi, STALKER2GameplayAspectFix.asi and their old INI/log files. Do not load them together with the new ASI.
+[*]Extract STALKER2CameraTweaks.asi and STALKER2CameraTweaks.ini into the same Win64 folder.
+[*]Launch the game.
+[/list]
 
-## Installation
+The plugin creates STALKER2CameraTweaks.log in the game folder. Include this log when reporting a compatibility problem; it records the mod and game SHA-256 values and signature-resolution status.
 
-1. Install Ultimate ASI Loader and place `dsound.dll` in:
+[b]TESTED[/b]
 
-   ```text
-   Stalker2\Binaries\Win64
-   ```
+[list]
+[*]21:9 and 32:9 gameplay, including startup, aspect switching and death/load camera rebuilds.
+[*]Auto, Native, forced 16:9, 21:9 and 32:9 cinematic framing.
+[*]Runtime aspect changes after changing resolution during the same session in Auto mode.
+[*]Dialogue zoom Native, Adaptive, Reduced and Disabled on Steam 2.0.4.
+[*]Sequential dialogue cycles and cinematic-to-dialogue state isolation.
+[*]Configurable runtime hotkeys and INI template synchronization behavior.
+[*]Dialogue resolver statically validated on Steam 2.0.2, 2.0.3 and 2.0.4. This is not runtime compatibility proof for the older builds.
+[/list]
 
-2. Remove the previous `STALKER2GameplayAspectFix.asi` and its old INI/log.
-   Do not load the old and unified ASI together.
-3. Extract `STALKER2UltrawideFix.asi` and
-   `STALKER2UltrawideFix.ini` into the same `Win64` folder.
-4. Launch the game.
+[b]KNOWN ISSUES[/b]
 
-The plugin creates `STALKER2UltrawideFix.log` in the game folder. Include this
-log when reporting a compatibility problem; it contains the mod and game
-SHA-256 values and signature-resolution status.
+[list]
+[*]A brief camera or projection shift may still be visible immediately after some cinematics while the game hands control back to gameplay.
+[*]Weapon/viewmodel FOV can be incorrect after a cinematic, load or gameplay-camera rebuild. Aiming down sights or opening a menu refreshes the game's viewmodel state. This is a separate game-side issue and is not fixed by this release.
+[*]Do not combine this release with the old gameplay ASI or experimental cinematic ASI files.
+[/list]
 
-## Tested compatibility
+[b]GAME UPDATE COMPATIBILITY[/b]
 
-Tested on:
+Gameplay, cinematic and dialogue code locations are resolved dynamically using guarded signatures and instruction validation rather than fixed patch-specific addresses.
 
-- Steam game build `2.0.4`.
-- Unreal Engine `5.5.4` target.
-- 21:9 gameplay, including startup, aspect switching and death/load rebuild.
-- 32:9 gameplay regression.
-- 21:9 and 32:9 cinematic framing with Hor+ FOV.
-- Forced 32:9 cinematic framing at `2560x1440`, producing the expected
-  letterbox presentation.
-- Dialogue zoom `Native`, `Adaptive`, `Reduced` and `Disabled` on Steam 2.0.4,
-  including sequential dialogue cycles and cinematic-to-dialogue isolation.
-- `Auto` cinematic aspect updates after changing resolution during the same
-  session.
-- Dialogue resolver portability was statically validated on Steam 2.0.2, 2.0.3
-  and 2.0.4. This is not runtime compatibility proof for the older builds.
+Game updates that only relocate validated code may continue to work without a mod update, while structural changes may require new signatures. If validation fails or becomes ambiguous, the affected hook fails safely rather than installing against an unknown code path.
 
-## Known Issues
+Runtime validation for this release was performed on Steam build 2.0.4. Static resolver validation across Steam 2.0.2-2.0.4 does not establish runtime support for the older builds.
 
-- **Post-cinematic camera/projection jump:** a brief camera or projection jump
-  may be visible immediately after a cinematic ends while native recovery hands
-  control back to gameplay. The cinematic and gameplay corrections complete,
-  but a short presentation handoff seam can remain visible.
-- **21:9 weapon/viewmodel FOV:** weapon and viewmodel FOV can be incorrect after
-  a cinematic, after loading, or after a camera rebuild. It may remain wrong
-  until the player aims down sights or opens a menu, which refreshes the game's
-  viewmodel state. This is a separate game-side issue.
-- Signature-based resolution improves resilience to address relocation but does
-  not guarantee compatibility with future patches. Game updates that only
-  relocate validated code may continue to work without a mod update, while
-  structural changes may require new signatures. The ASI fails safely when
-  validation does not pass.
-- Manual INI changes require a game restart. Runtime hotkey selections do not
-  require a restart and apply to the next corresponding cinematic or dialogue.
-- Do not combine this release with the old gameplay ASI or other experimental
-  cinematic ASI files.
+[b]DEFENDER NOTICE[/b]
 
-## Changelog
+Microsoft Defender may occasionally flag unsigned ASI files. The release binary was reviewed and classified as “Not malware.” If an old detection remains, update Microsoft Defender security intelligence and rescan the file.
 
-### 0.5.0
+[b]SUPPORT DEVELOPMENT[/b]
 
-- Added FOV-aware dialogue zoom modes: `Native`, `Adaptive`, `Reduced` and
-  `Disabled`.
-- `Adaptive` preserves the game's native optical zoom strength relative to the
-  current gameplay FOV; `Reduced` applies half of that optical effect.
-- Added smooth dialogue EXIT recovery and cinematic/dialogue state isolation.
-- Added optional runtime policy hotkeys with configurable `F1-F12`, `0-9` and
-  `A-Z` bindings; hotkeys are disabled by default and affect the next applicable
-  lifecycle.
-- Added INI template migration/synchronization while preserving user values.
+This mod is maintained by [url=https://github.com/Elhait/STALKER-2-Ultrawide-Fix-for-UE-5.5.4]Elhait[/url].
 
-### Research references
+If the mod helped you and you would like to support future updates:
 
-- [WIDEBOY Fixes by BigChenga](https://www.nexusmods.com/stalker2heartofchornobyl/mods/2337)
-  was used as a research reference for identifying dialogue/camera FOV
-  behavior. This mod's dialogue implementation was independently reverse
-  engineered and runtime validated.
+[list]
+[*][url=https://ko-fi.com/elhait]Ko-fi[/url]
+[*][url=https://donatello.to/Elhait]Donatello[/url]
+[/list]
 
-### 0.3.0
+[b]SOURCE CODE & RESEARCH[/b]
 
-- Unified gameplay and cinematic support in `STALKER2UltrawideFix.asi`.
-- Added signature-resolved cinematic aspect and live FOV boundaries.
-- Added Hor+ cinematic FOV correction for runtime and forced framing modes.
-- Added `Auto`, `Native`, `16:9`, `21:9` and `32:9` cinematic framing.
-- Added automatic INI creation and independent gameplay/cinematic settings.
-- Added SHA-256 logging for the loaded mod and game executable.
-- Generalized gameplay correction for ultrawide camera rebuilds, including
-  21:9 startup and death/load re-entry.
-
-### 0.1.1
-
-- Gameplay-only aspect correction for the Steam UE 5.5.4 build.
-- Replaced the fixed gameplay camera address with guarded signature resolution
-  and instruction validation.
-- Preserved the game's selected gameplay FOV and the verified two-pass aspect
-  transition.
-- Refused safely when the camera-writer signature was absent, ambiguous or
-  invalid.
-
-### 0.1.0
-
-- Historical gameplay aspect-fix release for the earlier Steam 2.0.2 build.
-- Superseded by the signature-resolved releases above.
+[list]
+[*][url=https://github.com/Elhait/STALKER-2-Ultrawide-Fix-for-UE-5.5.4]GitHub source and research history[/url]
+[*][url=https://www.nexusmods.com/stalker2heartofchornobyl/mods/2337]WIDEBOY Fixes by BigChenga[/url] - research reference used during dialogue FOV investigation; this mod's dialogue implementation was independently reverse engineered and runtime validated.
+[*]Third-party libraries and code attribution are listed in THIRD_PARTY_NOTICES.md.
+[/list]

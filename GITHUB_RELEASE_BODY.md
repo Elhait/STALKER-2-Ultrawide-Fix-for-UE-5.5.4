@@ -1,4 +1,4 @@
-### STALKER2UltrawideFix v0.5.0
+### STALKER 2 Ultrawide and Camera Tweaks for UE 5.5.4 — v0.5.0
 
 Unified gameplay and cinematic ultrawide fix for S.T.A.L.K.E.R. 2, validated on Steam build 2.0.4 with the UE 5.5.4 target.
 
@@ -16,7 +16,7 @@ Unified gameplay and cinematic ultrawide fix for S.T.A.L.K.E.R. 2, validated on 
 - Adaptive preserves native optical zoom strength relative to the actual gameplay FOV; Reduced applies half of that optical effect.
 - Dialogue transitions preserve native timing and use smooth EXIT recovery back to the gameplay FOV baseline.
 - Optional F9/F10 hotkeys select the policy for the next cinematic or dialogue; hotkeys are disabled by default.
-- Automatic creation of STALKER2UltrawideFix.ini.
+- Automatic creation of STALKER2CameraTweaks.ini.
 - Guarded signature-based resolution with safe refusal on mismatch.
 - SHA-256 logging for the loaded ASI and game executable.
 
@@ -58,8 +58,8 @@ DialogueCycle=F10
 
 1. Install Ultimate ASI Loader.
 2. Place `dsound.dll` in `Stalker2\Binaries\Win64`.
-3. Remove the previous `STALKER2GameplayAspectFix.asi` and its old INI/log.
-4. Copy `STALKER2UltrawideFix.asi` and `STALKER2UltrawideFix.ini` into the same folder.
+3. Remove previous `STALKER2UltrawideFix.asi`, `STALKER2GameplayAspectFix.asi` and their old INI/log files.
+4. Copy `STALKER2CameraTweaks.asi` and `STALKER2CameraTweaks.ini` into the same folder.
 5. Launch the game.
 
 **Tested**
@@ -81,6 +81,6 @@ DialogueCycle=F10
 - Dialogue resolver portability was statically validated on Steam 2.0.2, 2.0.3 and 2.0.4; runtime dialogue validation is limited to Steam 2.0.4.
 - Future patches may require updated signatures.
 
-Do not load this release together with the old `STALKER2GameplayAspectFix.asi`.
+Do not load this release together with old `STALKER2UltrawideFix.asi` or `STALKER2GameplayAspectFix.asi` files.
 
 The release archive includes the ASI, default INI, README, license and third-party notices.

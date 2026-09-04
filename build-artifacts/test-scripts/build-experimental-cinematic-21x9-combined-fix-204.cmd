@@ -6,9 +6,9 @@ if errorlevel 1 goto :fail
 where cl.exe >nul 2>&1
 if errorlevel 1 goto :fail
 
-cl /nologo /LD /std:c++latest /O1 /MT /EHsc /utf-8 /DNDEBUG /I..\..\external\safetyhook /I..\..\external\spdlog\include ..\..\src\experimental_cinematic_21_9_combined_fix_204.cpp ..\..\external\safetyhook\safetyhook.cpp ..\..\external\safetyhook\Zydis.c /link user32.lib bcrypt.lib /OUT:"%~dp0..\test-asi\STALKER2UltrawideFix.asi"
+cl /nologo /LD /std:c++latest /O1 /MT /EHsc /utf-8 /DNDEBUG /I..\..\external\safetyhook /I..\..\external\spdlog\include ..\..\src\experimental_cinematic_21_9_combined_fix_204.cpp ..\..\external\safetyhook\safetyhook.cpp ..\..\external\safetyhook\Zydis.c /link user32.lib bcrypt.lib /OUT:"%~dp0..\test-asi\STALKER2CameraTweaks.asi"
 if errorlevel 1 goto :fail
-echo Build succeeded: %~dp0..\test-asi\STALKER2UltrawideFix.asi
+echo Build succeeded: %~dp0..\test-asi\STALKER2CameraTweaks.asi
 popd
 exit /b 0
 

@@ -1,8 +1,8 @@
-# STALKER 2 Ultrawide Fix for UE 5.5.4 — Gameplay, Cinematics & Custom Framing
+# STALKER 2 Ultrawide and Camera Tweaks for UE 5.5.4
 
 ## Version 0.5.0
 
-Source for `STALKER2UltrawideFix.asi`, a unified gameplay and cinematic ultrawide fix for **S.T.A.L.K.E.R. 2: Heart of Chornobyl**. The current implementation is validated against the Steam game build tested with Unreal Engine `5.5.4`.
+Source for `STALKER2CameraTweaks.asi`, a unified ultrawide, cinematic and camera/FOV fix for **S.T.A.L.K.E.R. 2: Heart of Chornobyl**. The current implementation is validated against the Steam game build tested with Unreal Engine `5.5.4`.
 
 ## Features
 
@@ -15,7 +15,7 @@ Source for `STALKER2UltrawideFix.asi`, a unified gameplay and cinematic ultrawid
 - Supports custom cinematic framing independently of the physical display: `Auto`, `Native`, `16:9`, `21:9` or `32:9`.
 - Provides FOV-aware dialogue zoom modes: `Native`, `Adaptive`, `Reduced` and `Disabled`.
 - Optional runtime hotkeys select the policy for the next cinematic or dialogue; they are disabled by default.
-- Creates `STALKER2UltrawideFix.ini` automatically when it is missing.
+- Creates `STALKER2CameraTweaks.ini` automatically when it is missing.
 - Resolves gameplay and cinematic hook locations through guarded signatures and refuses safely when validation is ambiguous or fails.
 
 ## Download and installation
@@ -25,11 +25,11 @@ Prebuilt releases and installation instructions are available on [Nexus Mods](ht
 For local builds:
 
 1. Install [Ultimate ASI Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader) as `dsound.dll` in `Stalker2\\Binaries\\Win64`.
-2. Remove the previous `STALKER2GameplayAspectFix.asi` and its old INI/log. Do not load both ASIs together.
-3. Copy `STALKER2UltrawideFix.asi` and `STALKER2UltrawideFix.ini` to the same `Win64` directory.
+2. Remove previous `STALKER2UltrawideFix.asi`, `STALKER2GameplayAspectFix.asi` and their old INI/log files. Do not load old and new ASIs together.
+3. Copy `STALKER2CameraTweaks.asi` and `STALKER2CameraTweaks.ini` to the same `Win64` directory.
 4. Start the game normally.
 
-The plugin creates `STALKER2UltrawideFix.log` beside the game executable. The startup log includes SHA-256 values for the loaded mod and game executable, which helps verify support reports.
+The plugin creates `STALKER2CameraTweaks.log` beside the game executable. The startup log includes SHA-256 values for the loaded mod and game executable, which helps verify support reports.
 
 ## Configuration
 

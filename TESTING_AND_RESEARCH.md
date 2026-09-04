@@ -2,8 +2,9 @@
 
 ## Current unified mod — v0.5.0
 
-The current artifact is `STALKER2UltrawideFix.asi`, intended to replace the
-older `STALKER2GameplayAspectFix.asi`. Do not load both files together; remove
+The current artifact is `STALKER2CameraTweaks.asi`, intended to replace the
+older `STALKER2UltrawideFix.asi` and `STALKER2GameplayAspectFix.asi`. Do not
+load old and new files together; remove
 the older ASI before installing the unified one.
 
 The production configuration has four independent areas:
@@ -36,8 +37,9 @@ The INI is created automatically beside the ASI when missing. `Auto` uses the
 runtime camera aspect and updates when the game resolution changes during the
 same session. `Native` bypasses both cinematic hooks; forced 16:9, 21:9 and
 32:9 modes provide custom cinematic framing with matching FOV. The obsolete
-`FovCorrection` option is removed from generated INIs and migrated out of
-existing INIs.
+`FovCorrection` option is not part of the renamed v0.5.0 configuration. Settings
+from previous INI files are not migrated; managed descriptions and categories
+are still synchronized when the new INI already exists.
 
 ## Research progression
 
@@ -165,8 +167,9 @@ evidence, not runtime compatibility proof for 2.0.2 or 2.0.3. It does not
 guarantee support for 2.0.5 or another patch; a new executable identity requires
 fresh resolver and runtime validation.
 
-The validated v0.5.0 candidate was build-validated with ASI SHA-256:
-`B8A05E6DA92DDE89FBB213367B02F40BE3A5AACD46DC0C09E5D29DE9B13A881E`.
+The current renamed v0.5.0 production candidate is build-validated with ASI
+SHA-256:
+`90CFF6F4B641F365496179EBF21490EDDD07781E72F3CCE0A47592E4B570F92F`.
 
 ## Closed and deferred research
 
@@ -213,9 +216,9 @@ The validated v0.5.0 candidate was build-validated with ASI SHA-256:
 
 ## Release checklist
 
-- Remove the older `STALKER2GameplayAspectFix.asi` before installing the unified
+- Remove older `STALKER2UltrawideFix.asi` and `STALKER2GameplayAspectFix.asi` before installing the unified
   ASI.
-- Include only `STALKER2UltrawideFix.asi`, its INI and the required release
+- Include only `STALKER2CameraTweaks.asi`, its INI and the required release
   documentation in the release package.
 - Keep research ASIs, historical binaries, logs and Ghidra projects out of the
   release archive.
