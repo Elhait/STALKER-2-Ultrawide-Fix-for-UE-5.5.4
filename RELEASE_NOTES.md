@@ -28,6 +28,7 @@ Version 0.6.0 updates the unified configurable ASI for Steam 2.0.5. It keeps the
 
 ```ini
 [Gameplay]
+; Use true to enable gameplay aspect correction, or false to disable it.
 Enabled=true
 
 [Cinematics]
@@ -44,17 +45,19 @@ Zoom=Reduced
 [Hotkeys]
 ; Optional runtime controls for quickly testing different settings without restarting the game.
 ; Intended mainly for comparing modes and finding a preferred configuration; disable for normal use.
-; Supported keys: F1-F12, 0-9 and A-Z.
+; Use true to enable all runtime hotkeys, or false to disable them.
 Enabled=false
 
 ; Key used to cycle the cinematic mode for the next cinematic.
 ; Auto -> Native -> 16:9 -> 21:9 -> 32:9 -> Auto.
 ; Does not affect a cinematic that is already playing.
+; Supported keys: F1-F12, 0-9 and A-Z.
 CinematicCycle=F9
 
 ; Key used to cycle the dialogue zoom mode for the next dialogue.
 ; Native -> Adaptive -> Reduced -> Disabled -> Native.
 ; Does not affect a dialogue that is already in progress.
+; Supported keys: F1-F12, 0-9 and A-Z.
 DialogueCycle=F10
 ```
 

@@ -64,6 +64,7 @@ Default configuration:
 
 [code]
 [Gameplay]
+; Use true to enable gameplay aspect correction, or false to disable it.
 Enabled=true
 
 [Cinematics]
@@ -73,8 +74,11 @@ AspectRatio=Auto
 Zoom=Reduced
 
 [Hotkeys]
+; Use true to enable all runtime hotkeys, or false to disable them.
 Enabled=false
+; Supported keys: F1-F12, 0-9 and A-Z.
 CinematicCycle=F9
+; Supported keys: F1-F12, 0-9 and A-Z.
 DialogueCycle=F10
 [/code]
 
