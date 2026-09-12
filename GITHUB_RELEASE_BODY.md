@@ -1,10 +1,16 @@
-### STALKER 2 Ultrawide and Camera Tweaks for UE 5.5.4 — v0.5.0
+### STALKER 2 Ultrawide and Camera Tweaks for UE 5.5.4 — v0.6.0
 
-Unified gameplay and cinematic ultrawide fix for S.T.A.L.K.E.R. 2, validated on Steam build 2.0.4 with the UE 5.5.4 target.
+Unified gameplay and cinematic ultrawide fix for S.T.A.L.K.E.R. 2, runtime-validated on Steam build 2.0.5 with the UE 5.5.4 target.
 
 **Highlights**
 
 - Gameplay correction for 21:9 and 32:9.
+- Atomic gameplay aspect correction with the old staged intermediate replay
+  removed.
+- Single post-cinematic `RecoveryStart` gameplay handoff on the first confirmed
+  descending native FOV sample.
+- Removes the mod's additional post-cinematic flick while preserving the
+  game's native FOV recovery.
 - Automatic re-arm after camera rebuilds, including death/load.
 - Preserves the in-game gameplay FOV.
 - Cinematic aspect correction using the runtime camera aspect.
@@ -64,7 +70,7 @@ DialogueCycle=F10
 
 **Tested**
 
-- Steam build 2.0.4.
+- Steam build 2.0.5.
 - UE 5.5.4.
 - Gameplay at 21:9 and 32:9.
 - Camera rebuilds after death/load.
@@ -78,7 +84,8 @@ DialogueCycle=F10
 
 - Weapon/viewmodel FOV behavior is a separate game-side area and is not modified by the dialogue zoom feature.
 - Manual configuration file changes require a game restart; runtime hotkey selections apply to the next corresponding lifecycle without restarting.
-- Dialogue resolver portability was statically validated on Steam 2.0.2, 2.0.3 and 2.0.4; runtime dialogue validation is limited to Steam 2.0.4.
+- Resolver portability was statically validated on Steam 2.0.2–2.0.5; runtime
+  validation for this release is on Steam 2.0.5.
 - Future patches may require updated signatures.
 
 Do not load this release together with old `STALKER2UltrawideFix.asi` or `STALKER2GameplayAspectFix.asi` files.

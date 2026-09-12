@@ -1,12 +1,15 @@
-# Release Notes — 0.5.0
+# Release Notes — 0.6.0
 
 ## STALKER2CameraTweaks.asi
 
-Version 0.5.0 extends the unified configurable ASI with FOV-aware dialogue zoom control.
+Version 0.6.0 updates the unified configurable ASI for Steam 2.0.5. It keeps the existing gameplay, cinematic and dialogue features while replacing the staged gameplay correction with an atomic camera-state handoff.
 
 ## Included
 
 - Dynamic gameplay aspect correction for 21:9 and 32:9.
+- Atomic gameplay aspect apply with the previous intermediate `0x5` replay removed from the production path.
+- Single post-cinematic `RecoveryStart` gameplay handoff on the first confirmed descending native FOV sample.
+- Eliminates the mod's additional post-cinematic flick while leaving the game's native FOV recovery untouched.
 - Re-arming after gameplay camera rebuilds, including death/load.
 - Preservation of the player's selected gameplay FOV.
 - Cinematic aspect correction using the game's runtime camera aspect.
@@ -19,7 +22,7 @@ Version 0.5.0 extends the unified configurable ASI with FOV-aware dialogue zoom 
 - `Adaptive` preserves native optical zoom strength relative to the current gameplay FOV; `Reduced` applies half of that optical effect.
 - Dialogue transitions preserve native timing, including smooth EXIT recovery back to the actual gameplay FOV baseline.
 - Optional F9/F10 hotkeys select the policy for the next cinematic or dialogue; hotkeys are disabled by default.
-- Dialogue resolver contract statically validated across Steam builds 2.0.2, 2.0.3 and 2.0.4; runtime validation is limited to 2.0.4.
+- Production implementation runtime-tested on Steam build 2.0.5. Resolver portability is statically validated across Steam builds 2.0.2–2.0.5; older-build runtime validation is not claimed.
 
 ## Configuration
 
@@ -59,7 +62,7 @@ DialogueCycle=F10
 
 ## Compatibility and validation
 
-- Validated with the Steam game build `2.0.4` using the UE 5.5.4 target.
+- Runtime-validated with the Steam game build `2.0.5` using the UE 5.5.4 target.
 - Gameplay runtime-tested at 21:9 and 32:9, including aspect switching, death/load camera rebuilds and FOV preservation.
 - Cinematic runtime-tested at 21:9 and 32:9, including forced 32:9 framing at 2560x1440.
 - The cinematic and gameplay boundaries resolve through guarded signatures, but signature resolution does not guarantee support for a future game patch.

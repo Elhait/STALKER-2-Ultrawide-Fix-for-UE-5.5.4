@@ -2,6 +2,166 @@
 
 This document records evidence-backed research outcomes, completed implementations and exceptional repository housekeeping. Ordinary README, release-text, index and link-maintenance edits are intentionally not logged here.
 
+## 2026-09-12 — Clarify boolean values in production INI
+
+### Scope and non-goals
+
+- Add plain-language explanations for `true` and `false` under the
+  `[Gameplay] Enabled` and `[Hotkeys] Enabled` settings.
+- Synchronize the distributed INI and the ASI-generated default template.
+- No runtime logic, defaults, hooks, FOV behavior or resolver changes.
+
+### Changed paths
+
+- Updated `release-assets/STALKER2CameraTweaks.ini`.
+- Updated the embedded INI template in
+  `src/experimental_cinematic_21_9_combined_fix_204.cpp`.
+- Rebuilt `STALKER2CameraTweaks.asi` and refreshed the 0.6.0 archive.
+- Completed and archived `INI_BOOLEAN_HELP_TEXT_TASK_PLAN.md`.
+
+### Validation and limits
+
+- Build: PASS with the established Visual Studio 2022 x64 toolchain.
+- New ASI SHA-256:
+  `7F88F7A3547AB88D6E5358DE7E28757692DC4F651D72B6D31FD0BAC9E3351ACE`.
+- Embedded template contains both boolean explanations and the v0.6.0 header.
+- Production markers remain present; research/deferred markers remain absent.
+- Release asset and extracted archive contain the same new ASI SHA.
+- Runtime log validation on Steam 2.0.5: PASS. The new SHA was loaded, all
+  production hooks initialized, and gameplay plus RecoveryStart atomic applies
+  behaved as expected with no legacy staged replay.
+
+### Status
+
+- Completed: user-facing boolean help text and template synchronization.
+- Completed: runtime sanity check of the new comment-only binary.
+- Production behavior: unchanged by design.
+
+### Patch summary
+
+Clarified boolean configuration values for non-technical users and kept the
+packaged INI synchronized with the automatically generated template.
+
+## 2026-09-12 — Prepare v0.6.0 release package
+
+### Scope and non-goals
+
+- Execute the release preparation playbook for 0.6.0 through A8.
+- Promote only the runtime-validated production binary and documented atomic
+  gameplay/RecoveryStart behavior.
+- No source, build configuration or production behavior changes.
+- No publication, commit, tag, upload or native FOV bypass research.
+
+### Changed paths
+
+- Updated `README.md`, `RELEASE_NOTES.md`, `TESTING_AND_RESEARCH.md`,
+  `GITHUB_RELEASE_BODY.md` and `NEXUS_DESCRIPTION.md` for 0.6.0 claims.
+- Replaced `release-assets/STALKER2CameraTweaks.asi` with the exact
+  runtime-tested production binary.
+- Updated release-assets README and INI metadata.
+- Created `release-assets/STALKER2CameraTweaks-UE5.5.4-v0.6.0.zip`.
+- Moved nine historical release ZIPs to
+  `build-artifacts/archive/release-assets-history/` without deletion.
+- Created and completed `RELEASE_0.6.0_EXECUTION_TASK_PLAN.md`, archived under
+  `research/completed/`.
+
+### Validation and Git state
+
+- Production ASI SHA-256: `A0A5D0823C79B3A6E785F7244439402E5CED04CE37CE670F75FE8CCFE1932372`.
+- Release-assets ASI and extracted archive ASI match that SHA byte-for-byte.
+- Archive contains exactly: ASI, INI, README, LICENSE and third-party notices.
+- A0–A8 release gates: PASS.
+- Branch: `main`; HEAD: `8b9a329`.
+- Working tree contains extensive pre-existing user changes and research
+  artifacts; no unrelated paths were modified by this release batch.
+- Release-facing `git diff --check`: PASS. Existing unrelated TASKLOG
+  trailing whitespace remains untouched.
+
+### Completed / remaining / deferred
+
+- Completed: evidence/claims, production binary provenance, plan/archive
+  classification, documentation, release assets, archive extraction and final
+  consistency review.
+- Remaining: user publication and any Git commit/tag approval.
+- Deferred: native cinematic FOV bypass; interpolation owner remains unresolved.
+- Not runtime-validated: Steam builds older than 2.0.5.
+
+### Patch summary
+
+Prepared the 0.6.0 release package around the exact production binary already
+validated in-game, with claims limited to runtime Steam 2.0.5 evidence and
+static resolver portability across Steam 2.0.2–2.0.5.
+
+### Changelog summary
+
+0.6.0 documents and packages the atomic gameplay correction and single
+post-cinematic RecoveryStart handoff, removing the mod's secondary flick while
+preserving native FOV recovery.
+
+## 2026-09-12 — Integrate Combined Atomic Cinematic/Gameplay Handoff into production build
+
+### Scope and non-goals
+
+- Promote the runtime-validated Combined Atomic Cinematic/Gameplay Handoff
+  behavior into the production `STALKER2CameraTweaks.asi` build.
+- Replace the active staged gameplay transition with the atomic
+  `1.777778 / flags 0x4` apply and use the first confirmed descending native FOV
+  sample as the one-shot `RecoveryStart` trigger.
+- No native FOV recovery, `CameraComponent +0x230`, physical setter
+  `RVA 0x205FCC8`, cinematic FOV formula, dialogue behavior or user-selected
+  gameplay FOV changes.
+- No Pass1–Pass4 instrumentation, debugger code, timer/deferred replay or
+  native FOV bypass in the production build.
+
+### Changed paths
+
+- Updated `build.cmd` to enable only the validated atomic gameplay and
+  RecoveryStart handoff paths and link `bcrypt.lib`.
+- Updated `src/experimental_cinematic_21_9_combined_fix_204.cpp` so the old
+  staged Auto-restore branch is excluded from the atomic production build.
+- Archived completed plan as
+  `research/completed/PRODUCTION_COMBINED_ATOMIC_HANDOFF_INTEGRATION_TASK_PLAN.md`.
+- Rebuilt `STALKER2CameraTweaks.asi`.
+
+### Validation and Git state
+
+- Build: PASS with Visual Studio 2022 MSVC x64 toolchain.
+- Artifact: `STALKER2CameraTweaks.asi`, 1,105,408 bytes.
+- Artifact SHA-256:
+  `A0A5D0823C79B3A6E785F7244439402E5CED04CE37CE670F75FE8CCFE1932372`.
+- Binary string checks: legacy staged/deferred/research trace markers absent;
+  `AtomicReplayApplied` and `RecoveryStart` present.
+- `git diff --check`: PASS for the changed source/build paths.
+- Repository: `main` at `8b9a329`; working tree contains extensive pre-existing
+  user changes and untracked research/build material. No unrelated paths were
+  modified by this task.
+- In-game production runtime validation: PASS on Steam 2.0.5.
+
+### Completed / remaining / deferred
+
+- Completed: production build selection now matches the validated combined
+  atomic candidate behavior; old staged path is not present in the artifact;
+  no native FOV writes were introduced.
+- Completed: user-run production validation of normal gameplay, final
+  cinematic EXIT and dialogue coexistence on the unchanged production binary.
+- Deferred: native cinematic FOV bypass; its interpolation owner remains
+  unresolved and outside this integration.
+- Blocked: none for build delivery.
+
+### Patch summary
+
+Promoted the validated atomic gameplay aspect apply and first-downward-sample
+RecoveryStart handoff into the production ASI build without changing native FOV
+ownership or dialogue/cinematic FOV behavior.
+
+### Changelog summary
+
+Production candidate now uses one atomic gameplay framing correction and one
+atomic post-cinematic RecoveryStart handoff, with the legacy staged `0x5`
+transition removed from the production artifact. Runtime validation confirms
+one natural native FOV recovery remains and the mod's secondary post-cinematic
+flick is absent.
+
 ## 2026-09-01 — Reject direct ADS-register primitive transition
 
 ### Scope and non-goals
@@ -1897,6 +2057,50 @@ production behavior changed.
 
 ---
 
+## 2026-09-05 — Cinematic axis-constraint ownership Batch 1B
+
+### Scope
+
+- Perform the approved narrow source-to-binary correspondence pass for the
+  UE 5.5 `GetProjectionData` / effective axis-policy handoff hypothesis.
+- Do not change production source, build artifacts or runtime behavior.
+
+### Changed paths
+
+- `research/reports/CINEMATIC_ASPECT_RATIO_AXIS_CONSTRAINT_OWNERSHIP_BATCH1B.md`
+- `backlog/active/CINEMATIC_ASPECT_RATIO_AXIS_CONSTRAINT_OWNERSHIP_TASK_PLAN.md`
+
+### Validation and limits
+
+- Current Steam 2.0.4 identity gate: `PASS`.
+- Existing current-build evidence was checked for viewport/aspect, effective
+  FOV, projection construction and axis-dependent semantics.
+- Historical 2.0.3 projection logs were retained as provenance only.
+- No safe current-build projection boundary or effective owner was established.
+- No runtime test, tracer, source change, build or production modification
+  was performed.
+
+### Result
+
+- Batch 1B: `COMPLETE — BLOCKED OUTCOME`; no promotable current-build
+  boundary was found.
+- UE 5.5 engine contract: confirmed as a research target, not as STALKER 2
+  binary proof.
+- Batch 2 `MaintainYFOV` runtime test remains blocked.
+- Production Full Hor+ remains unchanged.
+
+### Patch summary
+
+Checked the approved `GetProjectionData` structural target without promoting
+generic or historical projection helpers as current-build ownership.
+
+### Changelog summary
+
+No production behavior changed; the axis-constraint branch remains unresolved
+and deferred pending new evidence.
+
+---
+
 ## 2026-09-03 — Dialogue zoom production promotion
 
 ### Scope
@@ -1954,3 +2158,1045 @@ recovery into the production dialogue path.
 
 Added Adaptive dialogue zoom, changed Reduced to optical half-strength behavior,
 and preserved the native dialogue lifecycle with smooth recovery.
+
+---
+
+## 2026-09-10 — D3D12 overlay ownership feasibility boundary
+
+### Scope
+
+- Investigate the approved bounded path from DXGI factory creation toward an
+  active game swapchain for optional notification-overlay feasibility.
+- Keep the stable Camera/FOV core and release assets untouched.
+- Stop before Present, ResizeBuffers, command submission, render resources,
+  ImGui or notifications.
+
+### Changed paths
+
+- `src/d3d12_notification_overlay_feasibility_204.cpp`
+- `backlog/active/DXGI_COM_SAFE_SWAPCHAIN_INTERCEPTION_TASK_PLAN.md`
+- `backlog/active/EXISTING_ACTIVE_SWAPCHAIN_OWNERSHIP_TASK_PLAN.md`
+- `research/reports/D3D12_NOTIFICATION_OVERLAY_BATCH1A_BOOTSTRAP_RESULT.md`
+- `research/reports/EXISTING_ACTIVE_SWAPCHAIN_OWNERSHIP_GATE_A_INVENTORY.md`
+- `build-artifacts/test-asi/STALKER2NotificationOverlayFeasibility.asi`
+
+### Validation and evidence
+
+- Visual Studio 2022 x64 C++23 build: PASS.
+- Final test ASI size: 800,256 bytes.
+- Final test ASI SHA-256:
+  `298F3455697F1D51E7648995CEA9EDD9EB108CD5B8275749733162DF3E98B8C3`.
+- Earlier build with composition slot `17` was invalid and excluded from
+  evidence; the final build uses `24`.
+- Official DXGI interface review confirmed the relevant method family and
+  D3D12 `pDevice` semantics; the ABI mapping used in the final build is
+  
+  `10=CreateSwapChain`, `15=CreateSwapChainForHwnd`,
+  `16=CreateSwapChainForCoreWindow`, `24=CreateSwapChainForComposition`.
+- User runtime log: `CreateDXGIFactory1` returned `IDXGIFactory4`, the queried
+  `IDXGIFactory2` pointer matched the returned address, and the private
+  25-entry clone installed without a crash.
+- No `CreateSwapChain*` callback was observed in the corrected run.
+- No swapchain, device or queue provenance was obtained.
+- Git commands were intentionally not run at the user's request; no Git state
+  change was performed or claimed.
+
+### Completed
+
+- Rejected the earlier unsafe direct SafetyHook COM-VMT approach after its
+  access violation evidence.
+- Implemented and built the bounded per-instance COM clone path.
+- Added forensic factory IID, returned-interface, ABI and provenance logging.
+- Corrected the composition method slot before accepting the final runtime
+  result.
+- Completed the corrected factory-path observation as a valid bounded negative:
+  no creation callback was observed.
+- Completed Gate A inventory for existing swapchain acquisition: no
+  independent current-build, documented runtime or retained-COM acquisition
+  anchor was found.
+
+### Remaining / deferred / blocked
+
+- `EXISTING_ACTIVE_SWAPCHAIN_OWNERSHIP`: `BLOCKED / DEFERRED` at Gate A.
+- Swapchain ownership, device provenance and queue provenance were not reached.
+- Present/Resize lifecycle, command submission, rendering and ImGui were not
+  started.
+- Overlay idea remains `DEFERRED`, not failed or rejected; resume requires a
+  genuinely new ownership evidence class.
+- Production Camera/FOV core and release behavior remain unchanged.
+
+### Patch summary
+
+Added a bounded COM-safe factory observation implementation, corrected the DXGI
+ABI mapping, and documented the absence of an independently proven path to an
+already-existing game swapchain.
+
+### Changelog summary
+
+No production behavior changed. D3D12 notification overlay research is deferred
+because presentation ownership could not be established safely.
+
+---
+
+## 2026-09-10 — UE4SS reflected camera-call route closed
+
+### Scope
+
+- Audit the UE4SS reflected-call surface for `CameraComponent.GetCameraView`.
+- Perform a follow-up read-only metadata/callability audit of
+  `PlayerCameraManager.BlueprintUpdateCamera`.
+- Keep runtime invocation, writes, suppression, production ASI changes and
+  undocumented helper reverse engineering out of scope.
+
+### Changed paths
+
+- `research/deferred/GETCAMERAVIEW_CALLABILITY_PROBE_TASK_PLAN.md`
+
+### Validation and evidence
+
+- Current UE4SS metadata confirms `GetCameraView(float, FMinimalViewInfo&)`.
+- Current UE4SS metadata confirms
+  `BlueprintUpdateCamera(AActor*, FVector&, FRotator&, float&)`.
+- `SafeObject.call(...)` was inspected and does not establish safe complex
+  ref/out storage or readback semantics.
+- `CallFunctionsByHandle(...)` exists only through a wrapper; no source-backed
+  contract, packing rules, lifetime rules or ref/out example was found.
+- No runtime invocation was attempted by design.
+- Existing unrelated working-tree changes were preserved.
+
+### Completed
+
+- Closed the UE4SS reflected-call route as `CLOSED / BLOCKED BY LUA ABI`.
+- Classified both camera candidates as metadata-positive but invocation-blocked.
+- Corrected the archived plan to record the later
+  `BlueprintUpdateCamera` read-only audit without misrepresenting it as part of
+  the primary runtime probe.
+
+### Remaining / deferred / blocked
+
+- The camera-evaluation hypothesis remains open; only this Lua invocation path
+  is exhausted.
+- Resume requires a documented/source-backed call bridge, a simpler callable
+  reflected method, or a new independent lifecycle anchor.
+- No production camera behavior or release asset changed.
+
+### Patch summary
+
+Documented the bounded UE4SS callability audit and its concrete Lua ABI blocker;
+no runtime probe or behavior modification was added.
+
+### Changelog summary
+
+No production changes. Reflected camera evaluation remains deferred pending a
+safe, documented invocation contract.
+
+---
+
+## 2026-09-10 — ASI vtable `+0x638` static gate closed
+
+### Scope
+
+- Classify only the virtual dispatch immediately after the confirmed camera
+  writer for the canonical Steam 2.0.4 image.
+- Determine whether trusted target/type evidence establishes camera/view or
+  projection reevaluation semantics.
+- No runtime calls, writes, new hooks, broad scans or production changes.
+
+### Changed paths
+
+- `research/deferred/ASI_LAST_GATE_VTABLE_638_TASK_PLAN.md`
+
+### Validation and evidence
+
+- Existing bounded Ghidra report
+  `02-Research/reports/CINEMATIC_AXIS_POLICY_OUTPUT_OWNERSHIP_BATCH1_1_VSLOT638.md`
+  records identity `PASS` for SHA-256
+  `2ECC5D19FE37F97E3F7F2467D652B299B5A47F010FA49FD803A49A4A6930A409`.
+- Image base `0x140000000` and the recorded `.text` layout match the canonical
+  Steam 2.0.4 image.
+- `FUN_1453BA300` preserves the source/output pair across
+  `FUN_140AF4022` and the following virtual call at `[RDI + 0x638]`.
+- No trusted concrete virtual target or owner/type association was recovered
+  within the bounded pass.
+- No runtime feasibility test was performed or authorized.
+
+### Completed
+
+- Completed the final ASI static gate as `COMPLETE / BOUNDED PARTIAL`.
+- Confirmed same-object source/output handoff into the virtual dispatch.
+- Closed the ASI cinematic route at this gate as `CLOSED / BLOCKED` for lack
+  of proven reevaluation semantics.
+
+### Remaining / deferred / blocked
+
+- The broader camera-evaluation hypothesis is not disproven.
+- Resume requires genuinely new target/type or lifecycle evidence; neighboring
+  slot scans and further caller climbing remain out of scope.
+- Production ASI and stable gameplay behavior remain unchanged.
+
+### Patch summary
+
+Recorded the existing bounded vtable-slot audit and its unresolved polymorphic
+target; no runtime or production code was changed.
+
+### Changelog summary
+
+No production changes. The final ASI cinematic research gate is deferred because
+`+0x638` could not be promoted to a proven camera/view reevaluation boundary.
+
+---
+
+## 2026-09-10 — UE4SS cinematic architecture feasibility closed
+
+### Scope
+
+- Audit the installed UE4SS observer, state-access and callable surfaces for a
+  future cinematic subsystem.
+- Keep the stable Camera/FOV ASI, release assets and runtime behavior untouched.
+
+### Changed paths
+
+- `research/reports/UE4SS_CINEMATIC_ARCHITECTURE_FEASIBILITY.md`
+- `research/deferred/UE4SS_CINEMATIC_ARCHITECTURE_FEASIBILITY_TASK_PLAN.md`
+
+### Validation and evidence
+
+- Existing UE4SS observers confirm live Camera/CameraManager/PCM discovery,
+  reflected state reads and lifecycle sampling.
+- Reflected property mutation is available, but storage mutation alone causing
+  the required downstream reevaluation was not observed.
+- `GetCameraView` and `BlueprintUpdateCamera` metadata is present, but complex
+  ref/out invocation remains unsupported by a confirmed Lua ABI contract.
+- `CallFunctionsByHandle` is available only through an opaque wrapper without
+  source-backed packing, lifetime or readback rules.
+- No runtime writes, undocumented calls, replacement module or production
+  migration was performed.
+- Existing unrelated working-tree changes were preserved.
+
+### Completed
+
+- Completed capability matrix and architecture decision gate.
+- Classified UE4SS observer/state architecture as `FEASIBLE`.
+- Classified UE4SS cinematic native-refresh architecture as
+  `BLOCKED / UNPROVEN`.
+- Deferred production migration as `NOT JUSTIFIED`.
+
+### Remaining / deferred / blocked
+
+- Cinematic research remains deferred pending a genuinely new evidence class.
+- Native reevaluation and downstream projection rebuild remain unresolved.
+- Stable production ASI remains the active fallback and was not modified.
+
+### Patch summary
+
+Documented the UE4SS architecture boundary: strong observation/state access,
+but no proven safe native cinematic reevaluation mechanism.
+
+### Changelog summary
+
+No production changes. UE4SS migration is deferred; only observer/state-layer
+use is currently justified.
+
+---
+
+## 2026-09-10 — UE4SS STALKER2CameraTweaks parallel prototype
+
+### Scope
+
+- Create a separate UE4SS module named `STALKER2CameraTweaks`.
+- Port the established gameplay, cinematic and dialogue policies where the
+  available UE4SS Lua/property surface is safe and deterministic.
+- Keep the production ASI and all native source behavior untouched.
+
+### Changed paths
+
+- `research/ue4ss/STALKER2CameraTweaks/Scripts/main.lua`
+- `research/ue4ss/STALKER2CameraTweaks/STALKER2CameraTweaks.ini`
+- `research/ue4ss/STALKER2CameraTweaks/README.md`
+- `build-artifacts/test-ue4ss/STALKER2CameraTweaks.zip`
+- `UE4SS_STALKER2CAMERATWEAKS_PORT_TASK_PLAN.md` (archived after review)
+
+### Validation and evidence
+
+- Verified dynamic CameraComponent/CameraManager/PCM discovery logic and
+  object invalidation recovery paths by source inspection.
+- Verified the ZIP contains only the intended UE4SS module files.
+- `git diff --check` found no new whitespace errors in the implementation;
+  one pre-existing trailing-whitespace warning remains in an unrelated line of
+  `backlog/TASKLOG.md`.
+- No Lua interpreter is installed in the workspace, so automatic Lua syntax
+  validation was not available.
+- No game launch or runtime validation was performed.
+
+### Completed
+
+- Added the separate UE4SS module with the required module name.
+- Added configuration-compatible gameplay, cinematic and dialogue policy
+  handling with bounded reflected writes and change-only state logging.
+- Documented the unsupported native reevaluation/ref-out limits and ASI-off
+  test isolation requirement.
+- Built the test ZIP without production ASI files.
+
+### Remaining / deferred / blocked
+
+- In-game behavior, visual framing and post-exit restoration remain
+  `NOT RUNTIME-VALIDATED`.
+- Native downstream projection reevaluation after reflected writes remains
+  `UNPROVEN`; no unsafe invocation was added.
+- The stable ASI remains the production fallback and was not modified.
+
+### Patch summary
+
+Added a parallel UE4SS implementation that exposes the current camera policy
+model through dynamic live-object discovery and bounded property operations.
+
+### Changelog summary
+
+New research/test artifact: `STALKER2CameraTweaks` UE4SS prototype. No change
+to the stable ASI release path.
+
+---
+
+## 2026-09-10 — UE4SS gameplay native-like transition correction
+
+### Scope
+
+- Re-analyze the confirmed native gameplay A→B→C transition.
+- Correct only the gameplay path of the UE4SS `STALKER2CameraTweaks`
+  prototype.
+- Keep cinematic and dialogue mutation disabled for this validation build.
+
+### Changed paths
+
+- `research/ue4ss/STALKER2CameraTweaks/Scripts/main.lua`
+- `research/ue4ss/STALKER2CameraTweaks/STALKER2CameraTweaks.ini`
+- `research/ue4ss/STALKER2CameraTweaks/README.md`
+- `build-artifacts/test-ue4ss/STALKER2CameraTweaks-gameplay-test.zip`
+- `UE4SS_GAMEPLAY_NATIVE_FIX_TASK_PLAN.md` (archived after review)
+
+### Validation and evidence
+
+- Reconfirmed from the supplied UE4SS log that the previous build only loaded
+  with gameplay disabled and recorded state; it did not reproduce the native
+  two-pass behavior.
+- Replaced the one-step final-state write with a bounded sequence:
+  constrained on → native 16:9 aspect → constrained off.
+- Added explicit phase, retry-limit and completion logging.
+- Static structural checks passed; no Lua interpreter is available for an
+  automatic syntax check.
+- Archive contents were inspected and contain only the intended module files.
+- No in-game runtime validation was performed after this correction.
+
+### Completed
+
+- Implemented the gameplay-only native-like transition attempt.
+- Disabled cinematic/dialogue mutation execution in this test build.
+- Preserved dynamic object discovery and authored gameplay FOV.
+
+### Remaining / deferred / blocked
+
+- Visual gameplay framing and downstream projection rebuild remain
+  `NOT RUNTIME-VALIDATED`.
+- UE4SS setter side effects are not yet proven equivalent to the native
+  reevaluation path.
+- Cinematic and dialogue ports remain intentionally untested.
+- Production ASI remains untouched.
+
+### Patch summary
+
+Corrected the UE4SS gameplay prototype to follow the evidence-backed native
+two-pass transition instead of writing only the final reflected state.
+
+### Changelog summary
+
+Updated the UE4SS gameplay test artifact; no production ASI changes.
+
+---
+
+## 2026-09-10 — UE4SS module config path correction
+
+### Scope
+
+- Resolve the UE4SS prototype's adjacent INI from the script location rather
+  than relying on UE4SS's current working directory.
+- Keep gameplay algorithm, cinematic/dialogue behavior and production ASI
+  untouched.
+
+### Changed paths
+
+- `research/ue4ss/STALKER2CameraTweaks/Scripts/main.lua`
+- `build-artifacts/test-ue4ss/STALKER2CameraTweaks-gameplay-configpath-fix.zip`
+- `research/deferred/UE4SS_CONFIG_PATH_FIX_TASK_PLAN.md`
+
+### Validation and evidence
+
+- Fresh installed log showed `Gameplay.Enabled=false` while the adjacent
+  installed INI contained `Enabled=true`, proving the previous log value could
+  not be trusted as evidence of the adjacent file.
+- The module now logs `CONFIG_PATH` and resolves
+  `Scripts/../STALKER2CameraTweaks.ini` first.
+- Structural checks and archive-content inspection passed.
+- Runtime validation after the path correction remains pending.
+
+### Completed
+
+- Removed the `.ini` path ambiguity without introducing `.conf` handling.
+- Produced a new gameplay test ZIP with the corrected loader.
+
+### Remaining / deferred / blocked
+
+- Gameplay visual success remains unvalidated until a new launch log is
+  supplied.
+- No cinematic or dialogue testing was performed.
+- Production ASI remains untouched.
+
+### Patch summary
+
+Fixed UE4SS configuration resolution so `STALKER2CameraTweaks` reads the INI
+beside its own script and reports the exact selected path.
+
+### Changelog summary
+
+Configuration-path reliability fix for the UE4SS gameplay test prototype.
+
+---
+
+## 2026-09-10 — UE4SS module-specific logging
+
+### Scope
+
+- Add a dedicated `STALKER2CameraTweaks.log` beside the UE4SS module INI.
+- Keep gameplay behavior unchanged and keep cinematic/dialogue unvalidated.
+
+### Changed paths
+
+- `research/ue4ss/STALKER2CameraTweaks/Scripts/main.lua`
+- `research/ue4ss/STALKER2CameraTweaks/README.md`
+- `build-artifacts/test-ue4ss/STALKER2CameraTweaks-gameplay-module-log.zip`
+- `research/deferred/UE4SS_MODULE_LOG_TASK_PLAN.md`
+
+### Validation and evidence
+
+- Log path is derived from `Scripts/main.lua`, independent of UE4SS working
+  directory.
+- Module messages continue to appear in `UE4SS.log` and are also written to
+  the dedicated module log.
+- Static checks and ZIP content inspection passed.
+- Runtime creation was not revalidated after this change.
+
+### Completed
+
+- Added dedicated module logging with a `LOG_PATH` startup record.
+- Preserved gameplay logic and did not confirm cinematic/dialogue behavior.
+
+### Remaining / deferred / blocked
+
+- Runtime validation of the new log remains pending.
+- Cinematic and dialogue fixes remain unconfirmed.
+- Production ASI remains untouched.
+
+### Patch summary
+
+Added isolated logging for UE4SS `STALKER2CameraTweaks` evidence collection.
+
+### Changelog summary
+
+UE4SS test module now writes its own module-specific log.
+
+---
+
+## 2026-09-10 — UE4SS cinematic and dialogue policy port
+
+### Scope
+
+- Restore the cinematic aspect/FOV and dialogue policy branches in the
+  separate `STALKER2CameraTweaks` UE4SS module.
+- Keep the validated gameplay branch and production ASI unchanged.
+
+### Changed paths
+
+- `research/ue4ss/STALKER2CameraTweaks/Scripts/main.lua`
+- `research/ue4ss/STALKER2CameraTweaks/README.md`
+- `build-artifacts/test-ue4ss/STALKER2CameraTweaks-all-policies-test.zip`
+- `research/deferred/UE4SS_CINEMATIC_DIALOGUE_PORT_TASK_PLAN.md`
+
+### Validation and evidence
+
+- Re-enabled cinematic lifecycle handling through the shared
+  `SetCinematicMode` callback when available, with a reflected-hook fallback.
+- Re-enabled configured cinematic aspect policies and the existing Full Hor+
+  FOV policy for non-`Native` modes.
+- Re-enabled the existing dialogue zoom detector and policy model.
+- Confirmed no separate `DisplayAspectRatio` or `PreserveAuthoredFOV` contract
+  remains in the module.
+- Inspected the test archive; it contains only the module README, INI and
+  `Scripts/main.lua`.
+- Runtime cinematic and dialogue behavior was not validated.
+
+### Completed
+
+- Restored the two requested UE4SS policy branches without ref/out calls,
+  native hooks, raw offsets or production ASI changes.
+- Preserved the dedicated module log and dynamic object discovery.
+
+### Remaining / deferred / blocked
+
+- User must test cinematic and dialogue behavior in-game.
+- Visual framing, letterbox removal and post-exit restoration remain
+  unconfirmed.
+- UE4SS native reevaluation remains unproven; writes are best-effort reflected
+  property/setter operations.
+
+### Patch summary
+
+Restored the UE4SS module's cinematic lifecycle/aspect handling and dialogue
+zoom policy while keeping gameplay logic and production ASI untouched.
+
+### Changelog summary
+
+UE4SS test module now includes the previously disabled cinematic and dialogue
+policy branches for runtime evaluation.
+
+---
+
+## 2026-09-10 — UE4SS dialogue/cinematic conflict correction
+
+### Scope
+
+- Correct the newly restored cinematic/dialogue branches after the first test
+  log showed FOV oscillation and missing cinematic activation.
+
+### Changed paths
+
+- `research/ue4ss/STALKER2CameraTweaks/Scripts/main.lua`
+- `build-artifacts/test-ue4ss/STALKER2CameraTweaks-all-policies-test.zip`
+
+### Validation and evidence
+
+- The supplied log showed repeated dialogue writes of `110.791499` while the
+  game interpolated the camera FOV, confirming a write loop.
+- Dialogue application is now bounded to one write per detected transition;
+  lifecycle changes reset dialogue state.
+- Added a state fallback for cinematic paths that do not emit the reflected
+  `SetCinematicMode` callback, restricted to a completed gameplay stage.
+- Runtime retest remains pending.
+
+### Completed
+
+- Removed the known repeated-write conflict from the UE4SS dialogue branch.
+- Added a non-invasive cinematic detection fallback.
+
+### Remaining / deferred / blocked
+
+- Cinematic visual framing and dialogue behavior still require a fresh in-game
+  test.
+- The fallback cannot prove native evaluation or guarantee all cinematic types.
+
+### Patch summary
+
+Bounded dialogue FOV writes to prevent oscillation and added fallback cinematic
+state detection when the reflected lifecycle hook is silent.
+
+### Changelog summary
+
+UE4SS test module no longer continuously fights the game's dialogue FOV
+interpolation.
+
+---
+
+## 2026-09-10 — UE4SS cinematic FOV baseline and write-loop correction
+
+### Scope
+
+- Correct the second runtime-test regression reported in the module log:
+  exaggerated cinematic FOV and repeated cinematic/dialogue writes.
+
+### Changed paths
+
+- `research/ue4ss/STALKER2CameraTweaks/Scripts/main.lua`
+- `research/ue4ss/STALKER2CameraTweaks/README.md`
+- `build-artifacts/test-ue4ss/STALKER2CameraTweaks-all-policies-test.zip`
+
+### Validation and evidence
+
+- The supplied log showed cinematic FOV `148.582718`, caused by using the
+  transient `FieldOfView=120` instead of the authored
+  `FirstPersonFieldOfView=90` baseline.
+- The log also showed repeated cinematic writes every poll while the game
+  continued its own camera transition.
+- Cinematic baseline now prefers `FirstPersonFieldOfView` and cinematic policy
+  writes are bounded to once per entry.
+- Runtime retest remains pending.
+
+### Completed
+
+- Removed the observed `120 → 148.58` cinematic over-expansion source.
+- Removed continuous cinematic writes that could fight dialogue/camera
+  interpolation.
+
+### Remaining / deferred / blocked
+
+- Fresh gameplay, dialogue and cinematic runtime evidence is still required.
+- No claim is made yet about final visual framing or dialogue behavior.
+
+### Patch summary
+
+Use the authored first-person FOV as the cinematic source and apply cinematic
+state once per lifecycle entry to avoid FOV inflation and oscillation.
+
+### Changelog summary
+
+UE4SS cinematic test path now avoids transient gameplay FOV inflation and
+repeated per-poll camera writes.
+
+---
+
+## 2026-09-10 — UE4SS double-FOV and transition misclassification correction
+
+### Scope
+
+- Correct the supplied runtime regression showing gameplay FOV corruption and
+  cinematic over-expansion.
+
+### Changed paths
+
+- `research/ue4ss/STALKER2CameraTweaks/Scripts/main.lua`
+- `build-artifacts/test-ue4ss/STALKER2CameraTweaks-all-policies-test.zip`
+
+### Validation and evidence
+
+- The log showed `DIALOGUE_START baselineFOV=120` during the constrained
+  gameplay aspect transition; this was a false dialogue detection.
+- The log showed cinematic `90` being transformed to `148.582725`; the formula
+  had applied the aspect conversion twice.
+- Dialogue detection now ignores constrained camera lifecycle transitions.
+- Cinematic FOV conversion now uses one aspect conversion and waits for the
+  target aspect state before applying it once.
+- Runtime retest remains pending.
+
+### Completed
+
+- Removed the observed false dialogue trigger during gameplay reevaluation.
+- Removed the observed double aspect conversion in cinematic FOV.
+- Preserved authored first-person FOV as the cinematic source.
+
+### Remaining / deferred / blocked
+
+- Fresh runtime evidence is required for gameplay, dialogue and cinematic
+  visual behavior.
+
+### Patch summary
+
+Corrected the cinematic Hor+ calculation and prevented gameplay camera
+transitions from being mistaken for dialogue zoom.
+
+### Changelog summary
+
+UE4SS test module no longer double-converts cinematic FOV or seeds dialogue
+zoom from a constrained gameplay transition.
+
+---
+
+## 2026-09-10 — UE4SS authored cinematic FOV tracking
+
+### Scope
+
+- Preserve instant cinematic correction while handling later native authored
+  FOV updates without a per-poll write loop.
+
+### Changed paths
+
+- `research/ue4ss/STALKER2CameraTweaks/Scripts/main.lua`
+- `research/ue4ss/STALKER2CameraTweaks/README.md`
+- `build-artifacts/test-ue4ss/STALKER2CameraTweaks-all-policies-test.zip`
+
+### Validation and evidence
+
+- The supplied log showed native camera logic overwriting the one-shot
+  cinematic result back toward 90 degrees.
+- Cinematic tracking now compares each observed FOV with the last transformed
+  value and transforms only a new observed input.
+- The instant ENTER correction is retained.
+- Runtime retest remains pending.
+
+### Completed
+
+- Added self-write suppression for cinematic FOV tracking.
+- Preserved the existing gameplay and dialogue isolation rules.
+
+### Remaining / deferred / blocked
+
+- Fresh runtime evidence is required to confirm cinematic shot changes,
+  dialogue behavior and post-exit restoration.
+
+### Patch summary
+
+Retained instant cinematic correction and added bounded authored-FOV tracking
+for later native camera updates.
+
+### Changelog summary
+
+UE4SS cinematic handling now follows new authored FOV inputs instead of
+repeating the same transformed write every poll.
+
+---
+
+## 2026-09-10 — Unified ASI build wiring correction
+
+### Scope
+
+- Connect the current unified gameplay/cinematic/dialogue source to the
+  canonical build command.
+
+### Changed paths
+
+- `build.cmd`
+- `STALKER2CameraTweaks.asi`
+- `ASI_UNIFIED_BUILD_TASK_PLAN.md`
+
+### Validation and evidence
+
+- `build.cmd` now compiles
+  `src/experimental_cinematic_21_9_combined_fix_204.cpp`.
+- Bounded local build completed successfully with VS 2022.
+- Output name is now `STALKER2CameraTweaks.asi`, matching README.
+- Runtime validation and game installation were not performed.
+
+### Completed
+
+- Fixed the build wiring that previously compiled only the superseded
+  gameplay-only source.
+
+### Remaining / deferred / blocked
+
+- The new unified ASI still requires in-game validation on the current game
+  executable.
+- No runtime compatibility claim is made for the post-update game build.
+
+### Patch summary
+
+Canonical build now produces the documented unified gameplay/cinematic/dialogue ASI.
+
+### Changelog summary
+
+Unified ASI source is now included in the default build command.
+
+---
+
+## 2026-09-10 — Current-patch cinematic EXIT resolver update
+
+### Scope
+
+- Adapt the unified cinematic resolver to the current game executable after
+  the previous EXIT signature reported zero matches.
+- Keep gameplay and dialogue implementation unchanged.
+
+### Changed paths
+
+- `src/experimental_cinematic_21_9_combined_fix_204.cpp`
+- `STALKER2CameraTweaks.asi`
+- `ASI_CINEMATIC_EXIT_UPDATE_TASK_PLAN.md`
+
+### Validation and evidence
+
+- Current executable SHA-256:
+  `E7B481A97C02D80581FAB0BECE940214A88EBE30211088A00129845A039F9293`.
+- Current ENTER topology resolves uniquely with one match.
+- New indexed EXIT topology resolves uniquely with one match at the static
+  scan level and preserves the validated consumer/vcall continuation shape.
+- VS 2022 local build completed successfully.
+- New ASI size: `1,095,680` bytes.
+- Follow-up runtime log showed the pattern was found but rejected by an
+  off-by-one decoded-instruction length/callsite check; corrected the indexed
+  `MOVSS` length to 6 bytes and rebuilt the ASI.
+- Corrected ASI SHA-256:
+  `69021D8758069F7EFE098B3C562A41E326A6DB0BF4BA88B789FB38854217DFB2`.
+- Runtime injection and in-game behavior after the update were not validated.
+- The game-folder ASI was not installed or modified by this task.
+
+### Completed
+
+- Added the current indexed `movss` EXIT pattern and semantic Zydis validation.
+- Preserved the previous EXIT pattern as a fallback for older compatible
+  topology.
+- Rebuilt the documented unified `STALKER2CameraTweaks.asi`.
+
+### Remaining / deferred / blocked
+
+- Fresh in-game validation is required on the current executable.
+- No new compatibility guarantee is claimed until the ASI is injected and the
+  runtime log confirms both cinematic hooks.
+
+### Patch summary
+
+Updated cinematic EXIT resolution for the post-update indexed camera sample
+path while retaining safe uniqueness and decoded-instruction checks.
+
+### Changelog summary
+
+Cinematic FOV hook resolution now recognizes the current game patch's EXIT
+instruction topology.
+## 2026-09-11 — Release preparation v0.5.2
+
+- Scope: prepared the unified ASI release archive for v0.5.2; no runtime logic
+  changes were introduced. Non-goals were research modules, old artifact
+  cleanup, commit/tag/publish and new gameplay validation.
+- Paths changed: `src/experimental_cinematic_21_9_combined_fix_204.cpp`,
+  release-facing Markdown files, `release-assets/STALKER2CameraTweaks.asi`,
+  `release-assets/STALKER2CameraTweaks.ini`,
+  `release-assets/README.md`, and the v0.5.2 release archive. Evidence is in
+  `research/reports/RELEASE_PREPARATION_v0.5.2.md`.
+- Git state: branch `main`; working tree contained pre-existing unrelated
+  changes and research artifacts. No Git state-changing operation was run.
+- Validation: build succeeded; production ASI SHA-256 is
+  `F55B17768625549D96E033FD79340A79DCA27FD9697264C37F4E7A6D6BAEEFB4`;
+  archive SHA-256 is
+  `73DD26FCAA29732E951728FE5EF01417AEB539435AA377D89F3858AC9D89A433`;
+  archive allowlist contains exactly five files. Supplied runtime evidence is
+  for the preceding current-build binary, not a new post-build injection.
+- Completed: v0.5.2 metadata, compatibility wording, production asset refresh
+  and archive construction.
+- Remaining: user review and any explicit publication/commit approval.
+- Deferred: runtime regression of the newly rebuilt binary; older-patch runtime
+  testing; all experimental camera research.
+- Blocked: none for package construction.
+- Not runtime-validated: the newly rebuilt v0.5.2 binary in this task.
+- Patch summary: updated release metadata for Steam 2.0.5 and preserved the
+  existing unified resolver implementation.
+- Changelog summary: v0.5.2 package update for the current Steam build, with
+  static resolver portability documented separately for Steam 2.0.2–2.0.4.
+
+## 2026-09-12 — Post-EXIT PCM/ViewTarget/CameraCache topology audit 2.0.5
+
+- Scope: one bounded, read-only Ghidra audit around the confirmed cinematic
+  handoff and camera writer. Non-goals were runtime probes, source changes,
+  production behavior, broad scans and guessed calls.
+- Paths changed: archived task plan at
+  `research/deferred/POST_EXIT_PCM_VIEWTARGET_CAMERACACHE_TOPOLOGY_AUDIT_205_TASK_PLAN.md`.
+  Research script, runner, evidence and report are under the workspace-level
+  `02-Research/` tree, outside the canonical Git repository.
+- Git state: branch `main`; pre-existing dirty changes and research artifacts
+  were preserved; no Git state-changing operation was run.
+- Validation: current 2.0.5 identity passed in Ghidra with SHA-256
+  `E7B481A97C02D80581FAB0BECE940214A88EBE30211088A00129845A039F9293`, image
+  base `0x140000000` and `.text` size `0x7CCD000`. The tracked headless run
+  completed and no canonical Ghidra lock remained.
+- Completed: audited `FUN_14318DCD4`, `FUN_14366F9AA`, `FUN_1453A7C88` and
+  `FUN_140A9EF7C`, including one-level direct callers and the requested PCM/cache
+  offset neighborhood.
+- Remaining: PCM/ViewTarget/cache blend ownership and the physical post-EXIT
+  interpolation producer remain unresolved.
+- Deferred: further ASI static expansion and runtime probing until a new
+  concrete topology anchor is available.
+- Blocked: no new PCM topology anchor was recovered within the approved scope.
+- Not runtime-validated: no behavior or production binary was changed or tested.
+- Patch summary: added a version-gated read-only topology audit and durable
+  evidence report; archived the completed plan as deferred.
+- Changelog summary: none; production behavior and release assets unchanged.
+
+## 2026-09-12 — Post-cinematic gameplay replay defer research build
+
+- Scope: compile-time research branch that defers the existing gameplay aspect
+  replay until three stable samples from the same source after confirmed native
+  cinematic recovery. Non-goals were production behavior, cinematic/dialogue
+  logic, FOV writes/clamps and direct EXIT timers.
+- Paths changed: `src/experimental_cinematic_21_9_combined_fix_204.cpp`,
+  `build-artifacts/research/build-post-cinematic-gameplay-replay-defer-test.cmd`,
+  and the separate research artifact
+  `build-artifacts/research/STALKER2CameraTweaks-PostCinematicGameplayReplayDeferTest205.asi`.
+- Git state: branch `main`; unrelated dirty changes and existing research
+  artifacts were preserved; no Git state-changing operation was run.
+- Validation: VS 2022 build succeeded with
+  `POST_CINEMATIC_GAMEPLAY_REPLAY_DEFER_TEST` and a 120 ms post-stability
+  delay. Research ASI size is 1,107,968 bytes; SHA-256 is
+  `CBCF0F0387E71587923AE049ABC1AA73C789181FEBA9716B01FE823C7D750F9E`.
+  No production binary was overwritten or installed.
+- Completed: same-source gate, three consecutive stable FOV samples,
+  coordinator/cinematic/dialogue/FOV/aspect invalidation, optional post-stability
+  delay and defer telemetry markers.
+- Remaining: clean in-game validation of recovery timing, replay timing and
+  visual framing.
+- Deferred: promotion to production and any change to the released ASI.
+- Blocked: none for the research build.
+- Not runtime-validated: behavior of the research ASI in-game.
+- Patch summary: added an isolated state-based post-cinematic replay defer test
+  while preserving the existing replay implementation as the only apply path.
+- Changelog summary: none; research-only artifact, not a release change.
+
+## 2026-09-12 — Combined atomic cinematic/gameplay handoff candidate
+
+- Scope: separate build combining the runtime-validated gameplay atomic replay
+  and cinematic RecoveryStart atomic handoff branches.
+- Non-goals: full staged replay after cinematic EXIT, new writes, timers,
+  dialogue/cinematic formula changes, production replacement and publishing.
+- Paths changed: `build-artifacts/research/build-combined-atomic-cinematic-gameplay-handoff-candidate.cmd`,
+  `backlog/COMBINED_ATOMIC_CINEMATIC_GAMEPLAY_HANDOFF_CANDIDATE_TASK_PLAN.md`,
+  and separate artifact
+  `build-artifacts/research/STALKER2CameraTweaks-CombinedAtomicCinematicGameplayHandoffCandidate205.asi`.
+- Git state: branch `main`; unrelated dirty work was preserved; no Git
+  state-changing operation was run.
+- Validation: VS 2022 build succeeded. Candidate ASI SHA-256 is
+  `788D98DCEFC6B268D83858CD5D92BFDABD64B5C07577EC33877013F56A7A361A`.
+  Production binary was not overwritten or installed.
+- Completed: combined candidate build using the two already tested atomic
+  compile-time paths.
+- Remaining: one combined in-game regression run.
+- Deferred: production promotion and release-asset changes.
+- Blocked: none for the build.
+- Not runtime-validated: combined candidate behavior.
+- Patch summary: prepared a single candidate for integrated gameplay and
+  post-cinematic atomic handoff validation.
+- Changelog summary: none; research-only candidate, not a release change.
+
+## 2026-09-12 — Atomic gameplay mutation deduplication refactor
+
+- Scope: behavior-preserving refactor of the combined candidate. Gameplay and
+  cinematic RecoveryStart triggers now share `ApplyGameplayAspectFixAtomic`.
+- Non-goals: trigger/state-machine changes, staged-state removal, cinematic or
+  dialogue behavior changes, production replacement and release changes.
+- Paths changed: `src/experimental_cinematic_21_9_combined_fix_204.cpp`,
+  `backlog/ATOMIC_GAMEPLAY_MUTATION_DEDUP_REFACTOR_TASK_PLAN.md`, and the
+  rebuilt combined candidate under `build-artifacts/research`.
+- Git state: branch `main`; unrelated dirty work was preserved; no Git
+  state-changing operation was run.
+- Validation: VS 2022 combined candidate build succeeded. `AppliedConstrainPass`
+  remains referenced by the legacy staged path; it was not removed. Production
+  binary was not overwritten or installed.
+- Completed: duplicated atomic mutation logic consolidated; independent gates
+  remain in place.
+- Completed: runtime regression check passed; gameplay and RecoveryStart
+  atomic applies each occurred once and no legacy staged replay markers were
+  observed.
+- Deferred: production promotion and release-asset changes.
+- Blocked: none for the build.
+- Runtime validation: PASS for the tested gameplay and cinematic transition.
+- Patch summary: centralized the already validated atomic aspect/flags write.
+- Changelog summary: none; research-only refactor, not a release change.
+
+## 2026-09-12 — Cinematic FOV transition bypass Pass 1 trace
+
+- Scope: observation-only trace built on the validated combined atomic
+  candidate. The known FOV consumer now records CinematicActive and
+  CinematicExiting phases with incoming FOV, state fields and caller data.
+- Non-goals: writes, suppression, clamping, transition bypass, duration/alpha
+  changes, new hooks and production/release changes.
+- Paths changed: `src/experimental_cinematic_21_9_combined_fix_204.cpp`,
+  `build-artifacts/research/build-cinematic-fov-transition-bypass-pass1.cmd`,
+  `backlog/CINEMATIC_FOV_TRANSITION_BYPASS_PASS1_TASK_PLAN.md`, and separate
+  trace artifact
+  `build-artifacts/research/STALKER2CameraTweaks-CinematicFovTransitionBypassPass1-Trace205.asi`.
+- Git state: branch `main`; unrelated dirty work was preserved; no Git
+  state-changing operation was run.
+- Validation: VS 2022 build succeeded. Trace ASI SHA-256 is
+  `60A2CBC20F3518809585EC382A0341FE95FE5001326B771F7DDFC5BB9BAA9647`.
+  Production binary was not overwritten or installed.
+- Completed: bounded ENTER/EXIT consumer instrumentation.
+- Remaining: one runtime trace run and transition classification.
+- Deferred: any FOV transition bypass implementation and production promotion.
+- Blocked: none for the trace build.
+- Not runtime-validated: trace behavior in-game.
+- Patch summary: added observation-only cinematic phase/state telemetry.
+- Changelog summary: none; research-only trace, not a release change.
+
+## 2026-09-12 — Gameplay fix atomicity research build
+
+- Scope: compile-time gameplay-only research branch replacing the staged
+  aspect/flags replay with one final `1.77778/0x4` write.
+- Non-goals: cinematic and dialogue changes, production artifact changes, new
+  hooks, timers, FOV changes and release packaging.
+- Paths changed: `src/experimental_cinematic_21_9_combined_fix_204.cpp`,
+  `build-artifacts/research/build-gameplay-fix-atomicity-test.cmd`,
+  `backlog/GAMEPLAY_FIX_ATOMICITY_TEST_TASK_PLAN.md`, and separate artifact
+  `build-artifacts/research/STALKER2CameraTweaks-GameplayFixAtomicityTest205.asi`.
+- Git state: branch `main`; unrelated dirty work was preserved; no Git
+  state-changing operation was run.
+- Validation: VS 2022 build succeeded. Research ASI SHA-256 is
+  `BC4F2CBAEFA2F3FE8FB7B8D4B48DB92A6E0DB46567CC9ADFF7113726578D5751`.
+  Production binary was not overwritten or installed.
+- Completed: guarded one-shot atomic gameplay replay and dedicated telemetry
+  marker; staged replay remains the default without the research flag.
+- Remaining: clean in-game validation of gameplay framing and transitions.
+- Deferred: production promotion and release-asset changes.
+- Blocked: none for the research build.
+- Not runtime-validated: in-game behavior of this artifact.
+- Patch summary: added a gameplay-only atomic final-state replay candidate.
+- Changelog summary: none; research-only artifact, not a release change.
+
+## 2026-09-12 — Post-cinematic atomic gameplay replay at recovery start
+
+- Scope: compile-time research branch that waits for the first confirmed
+  downward FOV sample during final `CinematicExiting`, then applies the final
+  gameplay aspect/flags state once as `1.77778/0x4`.
+- Non-goals: production changes, cinematic ENTER changes, dialogue changes,
+  timers, repeated clamps, new hooks and hard-coded gameplay FOV.
+- Paths changed: `src/experimental_cinematic_21_9_combined_fix_204.cpp`,
+  `build-artifacts/research/build-post-cinematic-gameplay-atomic-exit-handoff-test.cmd`,
+  and separate artifact
+  `build-artifacts/research/STALKER2CameraTweaks-PostCinematicGameplayAtomicExitHandoffTest205.asi`.
+- Git state: branch `main`; unrelated dirty work was preserved; no Git
+  state-changing operation was run.
+- Validation: VS 2022 build succeeded. Research ASI SHA-256 is
+  `0CF023173DCE9591677DE5996B35534BDBCD137872E5ED74519BFDA66C54E2B8`.
+  Production binary was not overwritten or installed.
+- Completed: first-downward-sample gate, same-source guard, dialogue/coordinator
+  cancellation and `phase=RecoveryStart` telemetry.
+- Remaining: one clean in-game comparison against the recovery-complete atomic
+  artifact.
+- Deferred: production promotion and release-asset changes.
+- Blocked: none for the research build.
+- Not runtime-validated: in-game behavior of this artifact.
+- Patch summary: moved the one-shot atomic gameplay projection apply from the
+  end of native recovery to the first confirmed native FOV descent.
+- Changelog summary: none; research-only artifact, not a release change.
+
+## 2026-09-12 — Post-cinematic gameplay replay at recovery research build
+
+- Scope: separate compile-time research variant that applies the final gameplay
+  aspect/flags state in the same writer invocation that confirms native FOV
+  recovery. Non-goals were pre-recovery writes, timers, new hooks, FOV changes
+  and production behavior.
+- Paths changed: `src/experimental_cinematic_21_9_combined_fix_204.cpp`,
+  `build-artifacts/research/build-post-cinematic-gameplay-replay-at-recovery-test.cmd`,
+  and separate artifact
+  `build-artifacts/research/STALKER2CameraTweaks-PostCinematicGameplayReplayAtRecoveryTest205.asi`.
+- Git state: branch `main`; unrelated dirty work was preserved; no Git
+  state-changing operation was run.
+- Validation: VS 2022 build succeeded with the recovery-time research flags.
+  Research ASI size is 1,108,992 bytes; SHA-256 is
+  `1B03CEBA06E3D13632F90BA8D475AB78DD1FF678A3BE592AF0784F5A23BD731A`.
+  Production binary was not overwritten or installed.
+- Completed: recovery-complete atomic apply path and explicit phase telemetry.
+- Remaining: one clean in-game comparison against the deferred atomic build.
+- Deferred: production promotion and release-asset changes.
+- Blocked: none for the research build.
+- Not runtime-validated: in-game behavior of the recovery-time artifact.
+- Patch summary: moved the research atomic apply to the earliest boundary where
+  native FOV recovery is already confirmed.
+- Changelog summary: none; research-only artifact, not a release change.
+
+## 2026-09-12 — Post-cinematic gameplay replay atomicity research build
+
+- Scope: compile-time research branch layered on the deferred handoff gate. It
+  applies final aspect/flags `1.77778/0x4` in one writer invocation after three
+  stable same-source samples and the existing 120 ms research delay. Non-goals
+  were production changes, new hooks, FOV changes and renderer intervention.
+- Paths changed: `src/experimental_cinematic_21_9_combined_fix_204.cpp`,
+  `build-artifacts/research/build-post-cinematic-gameplay-replay-atomicity-test.cmd`,
+  and separate artifact
+  `build-artifacts/research/STALKER2CameraTweaks-PostCinematicGameplayReplayAtomicityTest205.asi`.
+- Git state: branch `main`; unrelated dirty work was preserved; no Git
+  state-changing operation was run.
+- Validation: VS 2022 build succeeded with the defer and atomicity defines.
+  Research ASI size is 1,108,992 bytes; SHA-256 is
+  `BD506C52CE44919063C06EBC1FFF6458211BC24F2AE6813771C2C99E796DA7CA`.
+  Production binary was not overwritten or installed.
+- Completed: stable-sample counter now stops at `3/3`; atomic research path,
+  final-state write and telemetry marker were added behind compile-time flags.
+- Remaining: one clean in-game test is required to compare visual framing and
+  confirm whether the intermediate projection jump disappears.
+- Deferred: promotion to production and any release-asset change.
+- Blocked: none for the research build.
+- Not runtime-validated: in-game behavior of the atomicity artifact.
+- Patch summary: added a one-invocation final gameplay aspect/flags test while
+  preserving the existing deferred and production replay paths.
+- Changelog summary: none; research-only artifact, not a release change.

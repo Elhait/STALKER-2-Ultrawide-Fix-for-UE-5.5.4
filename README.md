@@ -1,12 +1,16 @@
 # STALKER 2 Ultrawide and Camera Tweaks for UE 5.5.4
 
-## Version 0.5.0
+## Version 0.6.0
 
 Source for `STALKER2CameraTweaks.asi`, a unified ultrawide, cinematic and camera/FOV fix for **S.T.A.L.K.E.R. 2: Heart of Chornobyl**. The current implementation is validated against the Steam game build tested with Unreal Engine `5.5.4`.
 
 ## Features
 
 - Corrects gameplay aspect transitions on 21:9 and 32:9 displays.
+- Applies the gameplay framing correction atomically, without the old staged
+  intermediate transition.
+- Applies one atomic gameplay handoff at the start of post-cinematic native FOV
+  recovery, removing the mod's additional post-cinematic flick.
 - Re-arms gameplay correction after camera rebuilds, including death/load.
 - Preserves the player's selected gameplay FOV.
 - Corrects cinematic aspect and applies Hor+ cinematic FOV.
@@ -78,12 +82,14 @@ Place dependencies under `external/safetyhook` and `external/spdlog`, then run `
 
 ## Tested scope and limitations
 
-- Runtime-tested on Steam game build `2.0.4`; the tested executable identity is recorded in the startup log.
+- Runtime-tested on Steam game build `2.0.5`; the tested executable identity is recorded in the startup log.
+- Static resolver portability was also checked against Steam builds `2.0.2`, `2.0.3` and `2.0.4`; these older builds do not have separate runtime validation for this release.
 - Gameplay tested at 21:9 and 32:9, including startup, hot aspect switching, death/load rebuild and FOV preservation.
 - `Auto` cinematics tested through `16:9 → 21:9 → 32:9 → 16:9 → 21:9 → 32:9` without restarting the game.
 - Cinematics tested with `Native`, forced `16:9`, forced `21:9` and forced `32:9` policies on `5120x1440`.
 - Forced 32:9 framing was also tested at `2560x1440` and correctly produced cinematic letterbox bars.
-- A brief post-cinematic projection/FOV handoff transition may still be visible in some scenarios.
+- The game retains its native post-cinematic FOV recovery; this release does
+  not force or rewrite that native transition.
 - Weapon/viewmodel FOV after loading on 21:9 is a separate known game issue and is not fixed by this mod.
 - Changing the game resolution during a session is validated for `AspectRatio=Auto`; restart the game after changing the configuration file itself.
 - Signature resolution improves resilience to address relocation but does not guarantee compatibility with future patches. The plugin fails safely when validation does not pass.

@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -78,6 +79,13 @@ namespace
     constexpr char kCinematicExitSignature[] =
         "F3 0F 10 47 38 E8 ?? ?? ?? ?? 48 89 F1 E8 ?? ?? ?? ?? "
         "48 89 C1 31 D2 E8 ?? ?? ?? ??";
+    // Current post-update EXIT topology: the FOV sample is loaded through an
+    // indexed source expression before entering the same consumer chain.
+    constexpr char kCinematicExitIndexedSignature[] =
+        "40 0F B6 C7 F3 0F 10 44 83 38 E8 ?? ?? ?? ?? "
+        "48 89 F1 E8 ?? ?? ?? ?? 48 89 C1 31 D2 E8 ?? ?? ?? ?? "
+        "48 85 C0 74 ?? 48 89 C7 48 8B 00 48 89 F9 "
+        "FF 90 80 08 00 00 48 8B 07 48 89 F9 FF 90 68 08 00 00";
     constexpr std::uint8_t kEnterVcallPair[] = {
         0xFF, 0x90, 0x78, 0x08, 0x00, 0x00, 0x48, 0x8B, 0x07, 0x48, 0x89, 0xF9,
         0xB2, 0x01, 0xFF, 0x90, 0x60, 0x08, 0x00, 0x00,
@@ -122,6 +130,34 @@ namespace
     std::atomic<CoordinatorState> g_coordinator{CoordinatorState::Gameplay};
     std::atomic<bool> g_cinematicFovApplied{false};
     std::atomic<float> g_exitTargetFov{0.0f};
+    std::atomic<bool> g_postExitTraceArmed{false};
+    std::atomic<std::uint32_t> g_postExitTraceWriterCount{0};
+    std::atomic<std::int64_t> g_postExitTraceStartNs{0};
+    std::atomic<std::uint64_t> g_postExitTraceSequence{0};
+#ifdef POST_CINEMATIC_GAMEPLAY_REPLAY_DEFER_TEST
+#ifndef POST_CINEMATIC_GAMEPLAY_REPLAY_DEFER_DELAY_MS
+#define POST_CINEMATIC_GAMEPLAY_REPLAY_DEFER_DELAY_MS 120
+#endif
+    constexpr std::uint32_t kDeferredGameplayStableSamples = 3;
+    constexpr std::int64_t kDeferredGameplayDelayNs =
+        static_cast<std::int64_t>(POST_CINEMATIC_GAMEPLAY_REPLAY_DEFER_DELAY_MS) * 1000000LL;
+    std::atomic<bool> g_deferredGameplayReplayPending{false};
+    std::atomic<std::uintptr_t> g_deferredGameplaySource{};
+    std::atomic<std::uint32_t> g_deferredGameplayStableSamples{0};
+    std::atomic<float> g_deferredGameplayLastFov{std::numeric_limits<float>::quiet_NaN()};
+    std::atomic<std::int64_t> g_deferredGameplayStableSinceNs{0};
+#endif
+#ifdef POST_CINEMATIC_GAMEPLAY_REPLAY_ATOMIC_EXIT_HANDOFF_TEST
+    std::atomic<bool> g_atomicExitHandoffPending{false};
+    std::atomic<std::uintptr_t> g_atomicExitHandoffSource{};
+    std::atomic<float> g_atomicExitHandoffPreviousFov{std::numeric_limits<float>::quiet_NaN()};
+#endif
+#ifdef POST_EXIT_CAMERA_FOV_WRITE_OWNER_TRACE
+    std::atomic<std::uint32_t> g_postExitWriteOwnerHitCount{0};
+#endif
+#ifdef POST_EXIT_FOV_PRODUCER_STORE_TRACE
+    std::atomic<std::uint32_t> g_postExitProducerStoreHitCount{0};
+#endif
     SafetyHookMid g_cinematicEnterHook;
     SafetyHookMid g_cinematicExitHook;
     std::uint8_t* g_cinematicAspectStore{};
@@ -129,10 +165,33 @@ namespace
     bool g_cinematicAspectPatched{};
     SafetyHookMid g_cinematicAspectStoreHook;
     SafetyHookMid g_dialogueBoundaryHook;
+#ifdef POST_EXIT_FOV_STATE_CONSUMER_TRACE
+    SafetyHookMid g_postExitConsumerHook;
+    constexpr std::uintptr_t kPostExitConsumerRva = 0x318DCD4;
+    constexpr char kPostExitConsumerGameSha256[] =
+        "e7b481a97c02d80581fab0bece940214a88ebe30211088a00129845a039f9293";
+#endif
+#ifdef POST_EXIT_CAMERA_FOV_WRITE_OWNER_TRACE
+    SafetyHookMid g_postExitWriteOwnerHook;
+    constexpr std::uintptr_t kPostExitWriteOwnerRva = 0x3DB2CE7;
+    constexpr char kPostExitWriteOwnerGameSha256[] =
+        "e7b481a97c02d80581fab0bece940214a88ebe30211088a00129845a039f9293";
+#endif
+
+#ifdef POST_EXIT_FOV_PRODUCER_STORE_TRACE
+    SafetyHookMid g_postExitProducerStoreHook;
+    constexpr std::uintptr_t kPostExitProducerStoreRva = 0x32B779D;
+    constexpr char kPostExitProducerStoreGameSha256[] =
+        "e7b481a97c02d80581fab0bece940214a88ebe30211088a00129845a039f9293";
+#endif
     std::atomic<float> g_lastObservedAspect{kNativeAspect};
     std::atomic<std::uintptr_t> g_lastAutoRestoreSource{};
     std::atomic<std::uintptr_t> g_lastGameplayCameraSource{};
     std::atomic<float> g_lastGameplayCameraFov{std::numeric_limits<float>::quiet_NaN()};
+    std::uintptr_t g_lastLoggedFovSource{};
+    float g_lastLoggedWriterInputFov = std::numeric_limits<float>::quiet_NaN();
+    float g_lastLoggedCameraWorldFov = std::numeric_limits<float>::quiet_NaN();
+    float g_lastLoggedCameraFirstPersonFov = std::numeric_limits<float>::quiet_NaN();
     std::mutex g_dialogueMutex;
     DialoguePhase g_dialoguePhase{DialoguePhase::Inactive};
     float g_dialogueBaseline = std::numeric_limits<float>::quiet_NaN();
@@ -197,6 +256,27 @@ namespace
         return "Unknown";
     }
 
+    const char* CoordinatorStateName(CoordinatorState state)
+    {
+        switch (state) {
+        case CoordinatorState::Gameplay: return "Gameplay";
+        case CoordinatorState::CinematicActive: return "CinematicActive";
+        case CoordinatorState::CinematicExiting: return "CinematicExiting";
+        }
+        return "Unknown";
+    }
+
+    const char* DialoguePhaseName(DialoguePhase phase)
+    {
+        switch (phase) {
+        case DialoguePhase::Inactive: return "Inactive";
+        case DialoguePhase::Candidate: return "Candidate";
+        case DialoguePhase::Active: return "Active";
+        case DialoguePhase::Exiting: return "Exiting";
+        }
+        return "Unknown";
+    }
+
     bool IsUltrawideAspect(float aspect)
     {
         return std::isfinite(aspect) && aspect > kNativeAspect + 0.001f;
@@ -216,6 +296,354 @@ namespace
         g_logger->info("{}", message.str());
     }
 
+#ifdef POST_CINEMATIC_GAMEPLAY_REPLAY_DEFER_TEST
+    std::int64_t NowSteadyNs()
+    {
+        return std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+    }
+
+    void CancelDeferredGameplayReplay(const char* reason, std::uintptr_t source = 0,
+        float fov = std::numeric_limits<float>::quiet_NaN(), float aspect = 0.0f,
+        std::uint8_t flags = 0)
+    {
+        const bool wasPending = g_deferredGameplayReplayPending.exchange(false,
+            std::memory_order_acq_rel);
+        const auto samples = g_deferredGameplayStableSamples.exchange(0,
+            std::memory_order_acq_rel);
+        g_deferredGameplaySource.store(0, std::memory_order_release);
+        g_deferredGameplayLastFov.store(std::numeric_limits<float>::quiet_NaN(),
+            std::memory_order_release);
+        g_deferredGameplayStableSinceNs.store(0, std::memory_order_release);
+        if (wasPending || samples != 0)
+            Log("DeferCancelled: reason=", reason, " source=0x", std::hex, source,
+                std::dec, " fov=", fov, " aspect=", aspect, " flags=0x", std::hex,
+                static_cast<unsigned>(flags), std::dec, " stableSamples=", samples, ".");
+    }
+
+    void ArmDeferredGameplayReplay(float targetFov)
+    {
+        g_deferredGameplaySource.store(0, std::memory_order_release);
+        g_deferredGameplayStableSamples.store(0, std::memory_order_release);
+        g_deferredGameplayLastFov.store(std::numeric_limits<float>::quiet_NaN(),
+            std::memory_order_release);
+        g_deferredGameplayStableSinceNs.store(0, std::memory_order_release);
+        g_deferredGameplayReplayPending.store(true, std::memory_order_release);
+        Log("DeferArmed: targetFov=", targetFov, " requiredStableSamples=3 delayMs=",
+            POST_CINEMATIC_GAMEPLAY_REPLAY_DEFER_DELAY_MS, ".");
+    }
+#endif
+
+#ifdef POST_CINEMATIC_GAMEPLAY_REPLAY_ATOMIC_EXIT_HANDOFF_TEST
+    void ResetAtomicExitHandoff(const char* reason)
+    {
+        const bool wasPending = g_atomicExitHandoffPending.exchange(false,
+            std::memory_order_acq_rel);
+        g_atomicExitHandoffSource.store(0, std::memory_order_release);
+        g_atomicExitHandoffPreviousFov.store(std::numeric_limits<float>::quiet_NaN(),
+            std::memory_order_release);
+        if (wasPending) Log("AtomicExitHandoffCancelled: reason=", reason, ".");
+    }
+
+    void ArmAtomicExitHandoff()
+    {
+        g_atomicExitHandoffSource.store(0, std::memory_order_release);
+        g_atomicExitHandoffPreviousFov.store(std::numeric_limits<float>::quiet_NaN(),
+            std::memory_order_release);
+        g_atomicExitHandoffPending.store(true, std::memory_order_release);
+        Log("AtomicExitHandoffArmed: trigger=first-downward-fov-sample.");
+    }
+#endif
+
+    void LogGameplayFovSourceChange(std::uintptr_t source, float writerInputXmm0,
+        float cameraWorldFov, float cameraFirstPersonFov, float aspect, std::uint8_t flags)
+    {
+        const bool sourceChanged = g_lastLoggedFovSource != source;
+        const auto changed = [](float current, float previous) {
+            return std::isfinite(current) != std::isfinite(previous) ||
+                (std::isfinite(current) && std::isfinite(previous) &&
+                    std::fabs(current - previous) > 0.01f);
+        };
+        if (!sourceChanged && !changed(writerInputXmm0, g_lastLoggedWriterInputFov) &&
+            !changed(cameraWorldFov, g_lastLoggedCameraWorldFov) &&
+            !changed(cameraFirstPersonFov, g_lastLoggedCameraFirstPersonFov)) return;
+
+        const auto coordinator = g_coordinator.load(std::memory_order_acquire);
+        DialoguePhase dialoguePhase = DialoguePhase::Inactive;
+        {
+            std::lock_guard dialogueLock(g_dialogueMutex);
+            dialoguePhase = g_dialoguePhase;
+        }
+        Log("Gameplay FOV source change: event=", CoordinatorStateName(coordinator),
+            " sourceChanged=", sourceChanged, " source=0x", std::hex, source, std::dec,
+            " writerInputXmm0=", writerInputXmm0,
+            " cameraWorldFov(+0x230)=", cameraWorldFov,
+            " cameraFirstPersonFov(+0x234)=", cameraFirstPersonFov,
+            " aspect=", aspect, " flags=0x", std::hex, static_cast<int>(flags), std::dec,
+            " replayState=", ReplayStateName(g_state.load(std::memory_order_acquire)),
+            " coordinator=", CoordinatorStateName(coordinator),
+            " dialoguePhase=", DialoguePhaseName(dialoguePhase), ".");
+        g_lastLoggedFovSource = source;
+        g_lastLoggedWriterInputFov = writerInputXmm0;
+        g_lastLoggedCameraWorldFov = cameraWorldFov;
+        g_lastLoggedCameraFirstPersonFov = cameraFirstPersonFov;
+    }
+
+    template <typename T>
+    bool SafeRead(std::uintptr_t address, T& value);
+
+    bool IsExecutable(std::uintptr_t address);
+
+    void LogPostExitWriterObservation(std::uintptr_t source, std::uintptr_t output,
+        float writerInputXmm0, float cameraWorldFov, float cameraFirstPersonFov,
+        float aspect, std::uint8_t flags, std::uint8_t selector,
+        float outputFov, float outputAspect)
+    {
+        if (!g_postExitTraceArmed.load(std::memory_order_acquire) || !g_logger) return;
+        const auto ordinal = g_postExitTraceWriterCount.fetch_add(1, std::memory_order_acq_rel) + 1;
+        const auto startNs = g_postExitTraceStartNs.load(std::memory_order_acquire);
+        const auto nowNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+        const auto elapsedUs = startNs > 0 ? (nowNs - startNs) / 1000 : -1;
+        DialoguePhase dialoguePhase = DialoguePhase::Inactive;
+        {
+            std::lock_guard dialogueLock(g_dialogueMutex);
+            dialoguePhase = g_dialoguePhase;
+        }
+        Log("Post-EXIT FOV trace: seq=", g_postExitTraceSequence.load(std::memory_order_acquire),
+            " ordinal=", ordinal, " elapsedUs=", elapsedUs,
+            " source=0x", std::hex, source, " output=0x", output, std::dec,
+            " writerInputXmm0=", writerInputXmm0,
+            " cameraWorldFov(+0x230)=", cameraWorldFov,
+            " cameraFirstPersonFov(+0x234)=", cameraFirstPersonFov,
+            " aspect=", aspect, " flags=0x", std::hex, static_cast<int>(flags),
+            " selector=0x", static_cast<int>(selector), std::dec,
+            " outputFOV(before)=", outputFov, " outputAspect(before)=", outputAspect,
+            " coordinator=", CoordinatorStateName(g_coordinator.load(std::memory_order_acquire)),
+            " replayState=", ReplayStateName(g_state.load(std::memory_order_acquire)),
+            " dialoguePhase=", DialoguePhaseName(dialoguePhase), ".");
+        if (ordinal >= 32) g_postExitTraceArmed.store(false, std::memory_order_release);
+    }
+
+    void ObservePostExitRawWriterEntry(SafetyHookContext& context)
+    {
+        if (!g_postExitTraceArmed.load(std::memory_order_acquire)) return;
+        const auto source = static_cast<std::uintptr_t>(context.rsi);
+        const auto output = static_cast<std::uintptr_t>(context.rbx);
+        float aspect = 0.0f;
+        std::uint8_t flags = 0;
+        float cameraWorldFov = 0.0f;
+        float cameraFirstPersonFov = 0.0f;
+        float outputFov = 0.0f;
+        float outputAspect = 0.0f;
+        std::uint8_t selector = 0;
+        if (!SafeRead(source + kAspectOffset, aspect) ||
+            !SafeRead(source + kFlagsOffset, flags) ||
+            !SafeRead(source + 0x230, cameraWorldFov) ||
+            !SafeRead(source + 0x234, cameraFirstPersonFov) ||
+            !SafeRead(source + 0x262, selector) ||
+            !SafeRead(output + 0x30, outputFov) ||
+            !SafeRead(output + 0x5C, outputAspect)) return;
+        LogPostExitWriterObservation(source, output, context.xmm0.f32[0],
+            cameraWorldFov, cameraFirstPersonFov, aspect, flags, selector,
+            outputFov, outputAspect);
+#ifdef POST_EXIT_INTERPOLATED_FOV_PRODUCER_TRACE
+        std::uintptr_t returnAddress = 0;
+        SafeRead(static_cast<std::uintptr_t>(context.rsp), returnAddress);
+        Log("Post-EXIT interpolated FOV producer marker: seq=",
+            g_postExitTraceSequence.load(std::memory_order_acquire),
+            " elapsedUs=", [&]() {
+                const auto startNs = g_postExitTraceStartNs.load(std::memory_order_acquire);
+                const auto nowNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch()).count();
+                return startNs > 0 ? (nowNs - startNs) / 1000 : -1;
+            }(),
+            " writerRIP=0x", std::hex,
+            reinterpret_cast<std::uintptr_t>(g_fovWriteAddress),
+            " return=0x", returnAddress, " source=0x", source, std::dec,
+            " writerInputXmm0=", context.xmm0.f32[0],
+            " cameraWorldFov=", cameraWorldFov,
+            " threadId=", GetCurrentThreadId(), ".");
+#endif
+    }
+
+#ifdef POST_EXIT_FOV_PRODUCER_STORE_TRACE
+    void ObservePostExitProducerStore(SafetyHookContext& context)
+    {
+        if (!g_logger) return;
+        const auto camera = static_cast<std::uintptr_t>(context.rsi);
+        const auto destination = camera + 0x230;
+        float previousFov = 0.0f;
+        const bool readable = camera != 0 && SafeRead(destination, previousFov);
+        const bool armed = g_postExitTraceArmed.load(std::memory_order_acquire);
+        const auto coordinator = g_coordinator.load(std::memory_order_acquire);
+        const auto startNs = g_postExitTraceStartNs.load(std::memory_order_acquire);
+        const auto nowNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+        const auto elapsedUs = startNs > 0 ? (nowNs - startNs) / 1000 : -1;
+        const auto hitOrdinal = g_postExitProducerStoreHitCount.fetch_add(
+            1, std::memory_order_acq_rel) + 1;
+        Log("Post-EXIT FOV producer store HIT: hitOrdinal=", hitOrdinal,
+            " armed=", armed, " elapsedUs=", elapsedUs,
+            " storeRIP=0x", std::hex,
+            reinterpret_cast<std::uintptr_t>(g_executable) + kPostExitProducerStoreRva,
+            " camera=0x", camera, " destination=0x", destination, std::dec,
+            " previousFov=", previousFov, " writtenFov=", context.xmm0.f32[0],
+            " readable=", readable, " coordinator=", CoordinatorStateName(coordinator),
+            " sequence=", g_postExitTraceSequence.load(std::memory_order_acquire),
+            " threadId=", GetCurrentThreadId(), ".");
+        if (hitOrdinal >= 256) g_postExitProducerStoreHitCount.store(0, std::memory_order_release);
+    }
+
+    bool InstallPostExitProducerStoreTrace(const std::string& gameHash)
+    {
+        if (_stricmp(gameHash.c_str(), kPostExitProducerStoreGameSha256) != 0) {
+            Log("Post-EXIT FOV producer store trace refused: game identity mismatch.");
+            return false;
+        }
+        auto* target = reinterpret_cast<std::uint8_t*>(
+            reinterpret_cast<std::uintptr_t>(g_executable) + kPostExitProducerStoreRva);
+        constexpr std::uint8_t expected[] = {
+            0xF3, 0x0F, 0x11, 0x86, 0x30, 0x02, 0x00, 0x00
+        };
+        if (!IsExecutable(reinterpret_cast<std::uintptr_t>(target)) ||
+            std::memcmp(target, expected, sizeof(expected)) != 0) {
+            Log("Post-EXIT FOV producer store trace refused: 2.0.5 store bytes mismatch.");
+            return false;
+        }
+        g_postExitProducerStoreHook = safetyhook::create_mid(target, ObservePostExitProducerStore);
+        if (!g_postExitProducerStoreHook) {
+            Log("Post-EXIT FOV producer store trace refused: hook creation failed.");
+            return false;
+        }
+        Log("Post-EXIT FOV producer store trace installed: RVA=0x32B779D; observation only.");
+        return true;
+    }
+#endif
+
+#ifdef POST_EXIT_CAMERA_FOV_WRITE_OWNER_TRACE
+    void ObservePostExitFovWriteOwner(SafetyHookContext& context)
+    {
+        if (!g_logger) return;
+
+        const auto camera = static_cast<std::uintptr_t>(context.rax);
+        const auto destination = camera + 0x230;
+        float previousFov = 0.0f;
+        const bool readable = camera != 0 && SafeRead(camera + 0x230, previousFov);
+        const bool armed = g_postExitTraceArmed.load(std::memory_order_acquire);
+        const auto coordinator = g_coordinator.load(std::memory_order_acquire);
+        const auto startNs = g_postExitTraceStartNs.load(std::memory_order_acquire);
+        const auto nowNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+        const auto elapsedUs = startNs > 0 ? (nowNs - startNs) / 1000 : -1;
+        std::uintptr_t returnAddress = 0;
+        SafeRead(static_cast<std::uintptr_t>(context.rsp), returnAddress);
+        const auto hitOrdinal = g_postExitWriteOwnerHitCount.fetch_add(1, std::memory_order_acq_rel) + 1;
+        Log("Post-EXIT FOV store candidate HIT: hitOrdinal=", hitOrdinal,
+            " armed=", armed, " elapsedUs=", elapsedUs,
+            " writeRIP=0x", std::hex,
+            reinterpret_cast<std::uintptr_t>(g_executable) + kPostExitWriteOwnerRva,
+            " return=0x", returnAddress, " camera=0x", camera, std::dec,
+            " destination=0x", std::hex, destination, std::dec,
+            " previousFov=", previousFov,
+            " writtenFov=", context.xmm0.f32[0],
+            " readable=", readable,
+            " coordinator=", CoordinatorStateName(coordinator),
+            " sequence=", g_postExitTraceSequence.load(std::memory_order_acquire),
+            " threadId=", GetCurrentThreadId(), ".");
+        if (hitOrdinal >= 256) g_postExitWriteOwnerHitCount.store(0, std::memory_order_release);
+    }
+
+    bool InstallPostExitFovWriteOwnerTrace(const std::string& gameHash)
+    {
+        if (_stricmp(gameHash.c_str(), kPostExitWriteOwnerGameSha256) != 0) {
+            Log("Post-EXIT FOV physical-write trace refused: game identity mismatch.");
+            return false;
+        }
+        auto* target = reinterpret_cast<std::uint8_t*>(
+            reinterpret_cast<std::uintptr_t>(g_executable) + kPostExitWriteOwnerRva);
+        constexpr std::uint8_t expected[] = {
+            0xF3, 0x0F, 0x11, 0x80, 0x30, 0x02, 0x00, 0x00
+        };
+        if (!IsExecutable(reinterpret_cast<std::uintptr_t>(target)) ||
+            std::memcmp(target, expected, sizeof(expected)) != 0) {
+            Log("Post-EXIT FOV physical-write trace refused: 2.0.5 store bytes mismatch.");
+            return false;
+        }
+        g_postExitWriteOwnerHook = safetyhook::create_mid(target, ObservePostExitFovWriteOwner);
+        if (!g_postExitWriteOwnerHook) {
+            Log("Post-EXIT FOV physical-write trace refused: hook creation failed.");
+            return false;
+        }
+        Log("Post-EXIT FOV physical-write trace installed: RVA=0x3DB2CE7; observation only.");
+        return true;
+    }
+#endif
+
+#ifdef POST_EXIT_FOV_STATE_CONSUMER_TRACE
+    void ObservePostExitFovConsumer(SafetyHookContext& context)
+    {
+        const auto coordinator = g_coordinator.load(std::memory_order_acquire);
+#ifdef CINEMATIC_FOV_TRANSITION_TRACE
+        if (!g_logger || (coordinator != CoordinatorState::CinematicActive &&
+            coordinator != CoordinatorState::CinematicExiting)) return;
+#else
+        if (!g_postExitTraceArmed.load(std::memory_order_acquire) ||
+            coordinator != CoordinatorState::CinematicExiting || !g_logger) return;
+#endif
+        const auto state = static_cast<std::uintptr_t>(context.rcx);
+        const auto callerAddress = [&]() {
+            std::uintptr_t value{};
+            SafeRead(static_cast<std::uintptr_t>(context.rsp), value);
+            return value;
+        }();
+        float state50 = 0.0f;
+        float state54 = 0.0f;
+        float state58 = 0.0f;
+        const bool reads = state != 0 &&
+            SafeRead(state + 0x50, state50) && SafeRead(state + 0x54, state54) &&
+            SafeRead(state + 0x58, state58);
+        const auto startNs = g_postExitTraceStartNs.load(std::memory_order_acquire);
+        const auto nowNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+        const auto elapsedUs = coordinator == CoordinatorState::CinematicExiting && startNs > 0
+            ? (nowNs - startNs) / 1000 : -1;
+        Log("Cinematic FOV consumer: phase=", CoordinatorStateName(coordinator),
+            " seq=", g_postExitTraceSequence.load(std::memory_order_acquire),
+            " elapsedUs=", elapsedUs, " incomingFov=", context.xmm1.f32[0],
+            " state=0x", std::hex, state, " caller=0x", callerAddress, std::dec,
+            " threadId=", GetCurrentThreadId(), " stateRead=", reads,
+            " state+0x50=", state50, " state+0x54(before)=", state54,
+            " state+0x58=", state58, ".");
+    }
+
+    bool InstallPostExitFovConsumerTrace(const std::string& gameHash)
+    {
+        if (_stricmp(gameHash.c_str(), kPostExitConsumerGameSha256) != 0) {
+            Log("Post-EXIT FOV consumer trace refused: game identity mismatch.");
+            return false;
+        }
+        auto* target = reinterpret_cast<std::uint8_t*>(
+            reinterpret_cast<std::uintptr_t>(g_executable) + kPostExitConsumerRva);
+        constexpr std::uint8_t expected[] = {
+            0x56, 0x57, 0x48, 0x83, 0xEC, 0x28, 0x48, 0x89, 0xCE,
+            0xF3, 0x0F, 0x11
+        };
+        if (!IsExecutable(reinterpret_cast<std::uintptr_t>(target)) ||
+            std::memcmp(target, expected, sizeof(expected)) != 0) {
+            Log("Post-EXIT FOV consumer trace refused: 2.0.5 prologue mismatch.");
+            return false;
+        }
+        g_postExitConsumerHook = safetyhook::create_mid(target, ObservePostExitFovConsumer);
+        if (!g_postExitConsumerHook) {
+            Log("Post-EXIT FOV consumer trace refused: hook creation failed.");
+            return false;
+        }
+        Log("Post-EXIT FOV consumer trace installed: RVA=0x318DCD4; observation only.");
+        return true;
+    }
+#endif
+
 #ifdef FOV_SETTINGS_TRACE_DIAGNOSTIC
     void LogGameplayFovChange(std::uintptr_t source, float fov)
     {
@@ -225,7 +653,7 @@ namespace
             !std::isfinite(g_lastLoggedGameplayFov) ||
             std::fabs(fov - g_lastLoggedGameplayFov) > 0.01f) {
             Log("Gameplay FOV trace: source=0x", std::hex, source, std::dec,
-                " primaryFOV=", fov,
+                " writerInputXmm0=", fov,
                 " coordinator=", static_cast<std::uint32_t>(coordinator),
                 " replayState=", static_cast<std::uint32_t>(replayState), ".");
             g_lastLoggedGameplayFovSource = source;
@@ -503,8 +931,11 @@ namespace
         for (const auto& original : source) {
             const auto trimmed = Trim(original);
             if (trimmed == "; STALKER 2 Ultrawide Fix v0.4.0" ||
-                trimmed == "; STALKER 2 Ultrawide Fix v0.5.0") {
-                output.emplace_back("; STALKER 2 Ultrawide and Camera Tweaks v0.5.0");
+                trimmed == "; STALKER 2 Ultrawide Fix v0.5.0" ||
+                trimmed == "; STALKER 2 Ultrawide and Camera Tweaks v0.5.0" ||
+                trimmed == "; STALKER 2 Ultrawide and Camera Tweaks v0.5.1" ||
+                trimmed == "; STALKER 2 Ultrawide Fix v0.5.2") {
+                output.emplace_back("; STALKER 2 Ultrawide and Camera Tweaks v0.5.2");
                 changed = true;
                 continue;
             }
@@ -639,13 +1070,14 @@ namespace
         if (!std::filesystem::exists(path)) {
             std::ofstream created(path, std::ios::out | std::ios::trunc);
             if (!created) return false;
-            created << "; STALKER 2 Ultrawide and Camera Tweaks v0.5.0\n"
+            created << "; STALKER 2 Ultrawide and Camera Tweaks v0.6.0\n"
                 << "; Author: Elhait\n"
                 << "; GitHub: https://github.com/Elhait/STALKER-2-Ultrawide-Fix-for-UE-5.5.4\n"
                 << "; Nexus Mods: https://www.nexusmods.com/stalker2heartofchornobyl/mods/2416\n"
                 << "; Configuration changes apply after restarting the game. F9/F10 apply to the next applicable state.\n"
                 << "\n[Gameplay]\n"
                 << "; Enables ultrawide aspect-ratio correction during gameplay.\n"
+                << "; Use true to enable the feature or false to disable it.\n"
                 << "Enabled=true\n"
                 << "\n\n\n[Cinematics]\n"
                 << "; Controls cinematic framing on ultrawide displays.\n"
@@ -665,16 +1097,18 @@ namespace
                 << "Zoom=Reduced\n"
                 << "\n\n\n[Hotkeys]\n"
                 << "; Enables or disables all runtime hotkeys.\n"
-                << "; Supported keys: F1-F12, 0-9 and A-Z.\n"
+                << "; Use true to enable all runtime hotkeys or false to disable them.\n"
                 << "Enabled=false\n"
                 << "\n"
                 << "; Key used to cycle the cinematic mode for the next cinematic.\n"
                 << "; Auto -> Native -> 16:9 -> 21:9 -> 32:9 -> Auto.\n"
                 << "; Does not affect a cinematic that is already playing.\n"
+                << "; Supported keys: F1-F12, 0-9 and A-Z.\n"
                 << "CinematicCycle=F9\n"
                 << "; Key used to cycle the dialogue zoom mode for the next dialogue.\n"
                 << "; Native -> Adaptive -> Reduced -> Disabled -> Native.\n"
                 << "; Does not affect a dialogue that is already in progress.\n"
+                << "; Supported keys: F1-F12, 0-9 and A-Z.\n"
                 << "DialogueCycle=F10\n";
             return static_cast<bool>(created);
         }
@@ -831,13 +1265,62 @@ namespace
         return IsValidAspect(observed) ? observed : kNativeAspect;
     }
 
+    BOOL CALLBACK FindCurrentProcessWindowForAspect(HWND window, LPARAM parameter)
+    {
+        DWORD processId = 0;
+        GetWindowThreadProcessId(window, &processId);
+        if (processId == GetCurrentProcessId() && IsWindowVisible(window) &&
+            GetWindow(window, GW_OWNER) == nullptr) {
+            *reinterpret_cast<HWND*>(parameter) = window;
+            return FALSE;
+        }
+        return TRUE;
+    }
+
+    float ReadClientViewportAspect()
+    {
+        HWND window = GetForegroundWindow();
+        DWORD processId = 0;
+        if (!window || (GetWindowThreadProcessId(window, &processId),
+            processId != GetCurrentProcessId())) {
+            window = nullptr;
+            EnumWindows(FindCurrentProcessWindowForAspect, reinterpret_cast<LPARAM>(&window));
+        }
+
+        RECT client{};
+        if (window && GetClientRect(window, &client)) {
+            const auto width = client.right - client.left;
+            const auto height = client.bottom - client.top;
+            if (width > 0 && height > 0) {
+                return static_cast<float>(width) / static_cast<float>(height);
+            }
+        }
+
+        DEVMODE display{ .dmSize = sizeof(DEVMODE) };
+        if (EnumDisplaySettings(nullptr, ENUM_CURRENT_SETTINGS, &display) && display.dmPelsHeight != 0) {
+            return static_cast<float>(display.dmPelsWidth) / static_cast<float>(display.dmPelsHeight);
+        }
+        return std::numeric_limits<float>::quiet_NaN();
+    }
+
+    float ResolveAutoAspect()
+    {
+        const float aspect = ReadClientViewportAspect();
+        if (IsValidAspect(aspect)) {
+            Log("Auto cinematic aspect resolved from client/display viewport: aspect=", aspect, ".");
+            return aspect;
+        }
+        Log("Auto cinematic aspect resolution unavailable; native aspect fallback=", kNativeAspect, ".");
+        return kNativeAspect;
+    }
+
     float ResolveCinematicAspect(std::uintptr_t object)
     {
         switch (g_runtimeCinematicPolicy.load(std::memory_order_acquire)) {
         case CinematicAspectPolicy::Forced16x9: return kNativeAspect;
         case CinematicAspectPolicy::Forced21x9: return kCinemaAspect;
         case CinematicAspectPolicy::Forced32x9: return kWideAspect;
-        case CinematicAspectPolicy::Auto: return ReadRuntimeAspect(object);
+        case CinematicAspectPolicy::Auto: return ResolveAutoAspect();
         case CinematicAspectPolicy::Native: return kNativeAspect;
         }
         return kNativeAspect;
@@ -850,6 +1333,26 @@ namespace
         std::memcpy(reinterpret_cast<void*>(source + kFlagsOffset), &flags, sizeof(flags));
         return true;
     }
+
+#if defined(GAMEPLAY_FIX_ATOMICITY_TEST) || \
+    defined(POST_CINEMATIC_GAMEPLAY_REPLAY_ATOMIC_EXIT_HANDOFF_TEST)
+    bool ApplyGameplayAspectFixAtomic(std::uintptr_t source, const char* phase, float fov,
+        float previousAspect, std::uint8_t previousFlags)
+    {
+        if (!WriteAspectAndFlags(source, kNativeAspect, 0x4)) {
+            Log("AtomicReplayRefused: phase=", phase,
+                " final aspect/flags fields were not writable.");
+            return false;
+        }
+        g_state.store(ReplayState::Complete, std::memory_order_release);
+        g_lastAutoRestoreSource.store(source, std::memory_order_release);
+        Log("AtomicReplayApplied: phase=", phase, " source=0x", std::hex, source,
+            std::dec, " fov=", fov, " aspect=", kNativeAspect,
+            " flags=0x4 previousAspect=", previousAspect, " previousFlags=0x",
+            std::hex, static_cast<unsigned>(previousFlags), std::dec, ".");
+        return true;
+    }
+#endif
 
     void ApplyCinematicAspectStore(SafetyHookContext& context)
     {
@@ -880,21 +1383,25 @@ namespace
         context.rip += kCinematicStoreInstructionLength;
     }
 
-    bool LogCameraModeChange(std::uintptr_t source, std::uintptr_t output, float primaryFov,
+    bool LogCameraModeChange(std::uintptr_t source, std::uintptr_t output, float writerInputXmm0,
         float aspect, std::uint8_t flags)
     {
-        float secondaryFov = 0.0f;
+        float cameraWorldFov = 0.0f;
+        float cameraFirstPersonFov = 0.0f;
         float outputFov = 0.0f;
         float outputAspect = 0.0f;
         float rawSourceAspect = 0.0f;
         std::uint8_t rawSourceFlags = 0;
         std::uint8_t selector = 0;
-        SafeRead(source + 0x234, secondaryFov);
+        SafeRead(source + 0x230, cameraWorldFov);
+        SafeRead(source + 0x234, cameraFirstPersonFov);
         SafeRead(source + kAspectOffset, rawSourceAspect);
         SafeRead(source + kFlagsOffset, rawSourceFlags);
         SafeRead(source + 0x262, selector);
         SafeRead(output + 0x30, outputFov);
         SafeRead(output + 0x5C, outputAspect);
+        LogGameplayFovSourceChange(source, writerInputXmm0, cameraWorldFov,
+            cameraFirstPersonFov, aspect, flags);
 
 #ifdef COMBINED_GAMEPLAY_DIAGNOSTIC
         std::uint64_t outputField40 = 0;
@@ -935,7 +1442,9 @@ namespace
         Log("Camera mode: source=0x", std::hex, source, std::dec,
             " rawSourceAspect=", rawSourceAspect, " rawSourceFlags=0x", std::hex,
             static_cast<int>(rawSourceFlags), std::dec,
-            " primaryFOV=", primaryFov, " secondaryFOV=", secondaryFov,
+            " writerInputXmm0=", writerInputXmm0,
+            " cameraWorldFov(+0x230)=", cameraWorldFov,
+            " cameraFirstPersonFov(+0x234)=", cameraFirstPersonFov,
             " aspect=", aspect, " flags=0x", std::hex, static_cast<int>(flags),
             " selector=0x", static_cast<int>(selector), std::dec,
             " outputFOV(before)=", outputFov, " outputAspect(before)=", outputAspect, ".");
@@ -1142,11 +1651,17 @@ namespace
         const bool isOwnAutoRestore = stateBeforeObservation == ReplayState::Complete &&
             std::fabs(aspect - kNativeAspect) <= 0.001f &&
             g_lastAutoRestoreSource.load(std::memory_order_acquire) == source;
-        // Cache the authoritative gameplay/runtime camera aspect, including
-        // native 16:9 after a live resolution change. Do not treat the native
-        // value left by this fix's own Auto restore as a new runtime aspect.
-        if (!isOwnAutoRestore && IsValidAspect(aspect))
+        // The restore observation arrives while the replay state is still
+        // AppliedConstrainPass; g_lastAutoRestoreSource is assigned only after
+        // the restore write below. Use the lifecycle state as the ownership
+        // marker so the fix-owned native value cannot replace the last
+        // externally observed ultrawide Auto aspect.
+        const bool isPendingOwnAutoRestore = stateBeforeObservation == ReplayState::AppliedConstrainPass &&
+            std::fabs(aspect - kNativeAspect) <= 0.001f;
+        if (!isOwnAutoRestore && !isPendingOwnAutoRestore && IsValidAspect(aspect))
             g_lastObservedAspect.store(aspect, std::memory_order_release);
+        else if (isPendingOwnAutoRestore)
+            Log("Skipped fix-owned Auto restore in authoritative aspect cache; aspect=", aspect, ".");
 #ifdef GAMEPLAY_ONE_SHOT_CINEMATIC_TRIGGER
         if (g_oneShotCinematicTriggerArmed.load(std::memory_order_acquire) &&
             g_state.load(std::memory_order_relaxed) == ReplayState::WaitingForAutomaticUpdate &&
@@ -1225,6 +1740,11 @@ namespace
                 logPost();
                 return;
             }
+#ifdef GAMEPLAY_FIX_ATOMICITY_TEST
+            ApplyGameplayAspectFixAtomic(source, "GameplayDetected", fov, aspect, flags);
+            logPost();
+            return;
+#else
             if (WriteAspectAndFlags(source, aspect, 0x5)) {
                 g_state.store(ReplayState::AppliedConstrainPass, std::memory_order_relaxed);
                 Log("Replayed constrained pass: fov=", fov, " aspect=", aspect, " flags=0x5.");
@@ -1233,8 +1753,10 @@ namespace
             }
             logPost();
             return;
+#endif
         }
 
+#ifndef GAMEPLAY_FIX_ATOMICITY_TEST
         if (state == ReplayState::AppliedConstrainPass) {
             // On the following camera update, restore Auto's native aspect and flags.
             if (WriteAspectAndFlags(source, kNativeAspect, 0x4)) {
@@ -1245,8 +1767,112 @@ namespace
                 Log("Replay refused: Auto-restore fields were not writable.");
             }
         }
+#endif
         logPost();
     }
+
+#ifdef POST_CINEMATIC_GAMEPLAY_REPLAY_DEFER_TEST
+    bool TryDeferredGameplayReplay(SafetyHookContext& context)
+    {
+        if (!g_deferredGameplayReplayPending.load(std::memory_order_acquire)) return false;
+
+        const auto source = static_cast<std::uintptr_t>(context.rsi);
+        const float fov = context.xmm0.f32[0];
+        const float targetFov = g_exitTargetFov.load(std::memory_order_acquire);
+        float aspect = 0.0f;
+        std::uint8_t flags = 0;
+        if (!SafeRead(source + kAspectOffset, aspect) || !SafeRead(source + kFlagsOffset, flags)) {
+            CancelDeferredGameplayReplay("camera-state-unreadable", source, fov, aspect, flags);
+            return true;
+        }
+
+        bool dialogueActive = false;
+        {
+            std::lock_guard dialogueLock(g_dialogueMutex);
+            dialogueActive = g_dialoguePhase != DialoguePhase::Inactive;
+        }
+        if (g_coordinator.load(std::memory_order_acquire) != CoordinatorState::Gameplay) {
+            CancelDeferredGameplayReplay("coordinator-not-gameplay", source, fov, aspect, flags);
+            return true;
+        }
+        if (dialogueActive) {
+            CancelDeferredGameplayReplay("dialogue-active", source, fov, aspect, flags);
+            return true;
+        }
+
+        const auto expectedSource = g_deferredGameplaySource.load(std::memory_order_acquire);
+        if (expectedSource != 0 && expectedSource != source) {
+            CancelDeferredGameplayReplay("source-changed", source, fov, aspect, flags);
+            return true;
+        }
+        if (!std::isfinite(fov) || !std::isfinite(targetFov) ||
+            std::fabs(fov - targetFov) > kRecoveryEpsilon) {
+            CancelDeferredGameplayReplay("fov-left-target-tolerance", source, fov, aspect, flags);
+            return true;
+        }
+        if (!IsUltrawideAspect(aspect) || flags != 0x4) {
+            CancelDeferredGameplayReplay("gameplay-replay-not-applicable", source, fov, aspect, flags);
+            return true;
+        }
+
+        const float previousFov = g_deferredGameplayLastFov.load(std::memory_order_acquire);
+        if (std::isfinite(previousFov) && std::fabs(fov - previousFov) > kDialogueTransformEpsilon) {
+            CancelDeferredGameplayReplay("fov-not-stable", source, fov, aspect, flags);
+            return true;
+        }
+        if (expectedSource == 0)
+            g_deferredGameplaySource.store(source, std::memory_order_release);
+        g_deferredGameplayLastFov.store(fov, std::memory_order_release);
+
+        auto samples = g_deferredGameplayStableSamples.load(std::memory_order_acquire);
+        if (samples < kDeferredGameplayStableSamples) {
+            samples = g_deferredGameplayStableSamples.fetch_add(1,
+                std::memory_order_acq_rel) + 1;
+            Log("StableSample ", samples, "/3: source=0x", std::hex, source, std::dec,
+                " fov=", fov, " targetFov=", targetFov, " aspect=", aspect,
+                " flags=0x", std::hex, static_cast<unsigned>(flags), std::dec,
+                " elapsedUs=", (NowSteadyNs() - g_postExitTraceStartNs.load(std::memory_order_acquire)) / 1000, ".");
+            if (samples < kDeferredGameplayStableSamples) return true;
+
+            const auto stableSince = NowSteadyNs();
+            g_deferredGameplayStableSinceNs.store(stableSince, std::memory_order_release);
+            Log("StableStateConfirmed: source=0x", std::hex, source, std::dec,
+                " fov=", fov, " aspect=", aspect, " flags=0x", std::hex,
+                static_cast<unsigned>(flags), std::dec, ".");
+        }
+        const auto stableSince = g_deferredGameplayStableSinceNs.load(std::memory_order_acquire);
+        if (NowSteadyNs() - stableSince < kDeferredGameplayDelayNs) return true;
+
+        bool expectedPending = true;
+        if (!g_deferredGameplayReplayPending.compare_exchange_strong(expectedPending, false,
+            std::memory_order_acq_rel)) return true;
+        g_deferredGameplayStableSamples.store(0, std::memory_order_release);
+        Log("DeferredReplayApplied: source=0x", std::hex, source, std::dec,
+            " fov=", fov, " aspect=", aspect, " flags=0x", std::hex,
+            static_cast<unsigned>(flags), std::dec, " delayMs=",
+            POST_CINEMATIC_GAMEPLAY_REPLAY_DEFER_DELAY_MS,
+#ifdef POST_CINEMATIC_GAMEPLAY_REPLAY_ATOMICITY_TEST
+            " mode=atomic.");
+#else
+            " mode=legacy.");
+#endif
+#ifdef POST_CINEMATIC_GAMEPLAY_REPLAY_ATOMICITY_TEST
+        if (WriteAspectAndFlags(source, kNativeAspect, 0x4)) {
+            g_state.store(ReplayState::Complete, std::memory_order_release);
+            g_lastAutoRestoreSource.store(source, std::memory_order_release);
+            Log("AtomicReplayApplied: source=0x", std::hex, source, std::dec,
+                " fov=", fov, " aspect=", kNativeAspect, " flags=0x4 delayMs=",
+                POST_CINEMATIC_GAMEPLAY_REPLAY_DEFER_DELAY_MS, ".");
+        } else {
+            Log("AtomicReplayRefused: final aspect/flags fields were not writable.");
+        }
+#else
+        g_state.store(ReplayState::WaitingForAutomaticUpdate, std::memory_order_release);
+        ReplayManualTransitionOriginal(context);
+#endif
+        return true;
+    }
+#endif
 
     float CinematicHorPlus(float fov, float aspect)
     {
@@ -1332,6 +1958,28 @@ namespace
             ContainsBytes(match, 96, kExitVcallPair, sizeof(kExitVcallPair));
     }
 
+    bool ValidateIndexedExitBoundary(std::uint8_t* match, std::uint8_t*& callsite)
+    {
+        constexpr std::size_t kMovssOffset = 4;
+        constexpr std::size_t kCallOffset = 10;
+        ZydisDecodedInstruction instruction{};
+        ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT]{};
+        if (!DecodeInstruction(match + kMovssOffset, instruction, operands) ||
+            instruction.mnemonic != ZYDIS_MNEMONIC_MOVSS || instruction.length != 6 ||
+            instruction.operand_count_visible < 2 ||
+            operands[0].type != ZYDIS_OPERAND_TYPE_REGISTER ||
+            operands[0].reg.value != ZYDIS_REGISTER_XMM0 ||
+            operands[1].type != ZYDIS_OPERAND_TYPE_MEMORY ||
+            operands[1].mem.base != ZYDIS_REGISTER_RBX ||
+            operands[1].mem.index != ZYDIS_REGISTER_RAX ||
+            operands[1].mem.scale != 4 ||
+            !operands[1].mem.disp.has_displacement ||
+            operands[1].mem.disp.value != 0x38) return false;
+        callsite = match + kCallOffset;
+        return IsCallRel32(callsite) &&
+            ContainsBytes(match, 96, kExitVcallPair, sizeof(kExitVcallPair));
+    }
+
     bool ResolveCinematicAspectStore(std::uint8_t*& store)
     {
         const auto matches = Memory::PatternScanAll(g_executable, kCinematicAspectSetterSignature);
@@ -1362,14 +2010,21 @@ namespace
     bool ResolveCinematicFovCallsites(std::uint8_t*& enter, std::uint8_t*& exit)
     {
         const auto enterMatches = Memory::PatternScanAll(g_executable, kCinematicEnterSignature);
-        const auto exitMatches = Memory::PatternScanAll(g_executable, kCinematicExitSignature);
+        auto exitMatches = Memory::PatternScanAll(g_executable, kCinematicExitSignature);
+        bool indexedExit = false;
+        if (exitMatches.empty()) {
+            exitMatches = Memory::PatternScanAll(g_executable, kCinematicExitIndexedSignature);
+            indexedExit = true;
+        }
         if (enterMatches.size() != 1 || exitMatches.size() != 1) {
             Log("Cinematic FOV signatures rejected: enterMatches=", enterMatches.size(),
                 " exitMatches=", exitMatches.size(), ".");
             return false;
         }
         if (!ValidateEnterBoundary(enterMatches.front(), enter) ||
-            !ValidateExitBoundary(exitMatches.front(), exit)) return false;
+            (indexedExit
+                ? !ValidateIndexedExitBoundary(exitMatches.front(), exit)
+                : !ValidateExitBoundary(exitMatches.front(), exit))) return false;
         const auto enterTarget = ResolveRel32CallTarget(enter);
         const auto exitTarget = ResolveRel32CallTarget(exit);
         if (!enterTarget || enterTarget != exitTarget || !IsExecutable(reinterpret_cast<std::uintptr_t>(enterTarget))) {
@@ -1407,6 +2062,12 @@ namespace
 
     void TraceCinematicEnter(SafetyHookContext& context)
     {
+#ifdef POST_CINEMATIC_GAMEPLAY_REPLAY_DEFER_TEST
+        CancelDeferredGameplayReplay("new-cinematic-enter");
+#endif
+#ifdef POST_CINEMATIC_GAMEPLAY_REPLAY_ATOMIC_EXIT_HANDOFF_TEST
+        ResetAtomicExitHandoff("new-cinematic-enter");
+#endif
         const bool cinematicFovEnabled = CinematicAspectOverrideEnabled();
         const auto policy = g_runtimeCinematicPolicy.load(std::memory_order_acquire);
         if (cinematicFovEnabled) {
@@ -1418,7 +2079,9 @@ namespace
         const float after = cinematicFovEnabled && std::isfinite(before) && std::isfinite(aspect) &&
             before > 1.0f && before < 179.0f && aspect > 1.0f
             ? CinematicHorPlus(before, aspect) : before;
-        if (std::isfinite(after) && after > 1.0f && after < 179.0f) context.xmm0.f32[0] = after;
+        if (std::isfinite(after) && after > 1.0f && after < 179.0f) {
+            context.xmm0.f32[0] = after;
+        }
         g_coordinator.store(CoordinatorState::CinematicActive, std::memory_order_release);
         Log("Global cinematic ENTER: aspect=", aspect, " authoredFov=", before,
             " transformedFov=", context.xmm0.f32[0],
@@ -1428,10 +2091,25 @@ namespace
 
     void TraceCinematicExit(SafetyHookContext& context)
     {
+#ifdef POST_CINEMATIC_GAMEPLAY_REPLAY_DEFER_TEST
+        CancelDeferredGameplayReplay("new-cinematic-exit");
+#endif
+#ifdef POST_CINEMATIC_GAMEPLAY_REPLAY_ATOMIC_EXIT_HANDOFF_TEST
+        ResetAtomicExitHandoff("new-cinematic-exit");
+#endif
         g_exitTargetFov.store(context.xmm0.f32[0], std::memory_order_release);
+        g_postExitTraceWriterCount.store(0, std::memory_order_release);
+        g_postExitTraceSequence.fetch_add(1, std::memory_order_acq_rel);
+        g_postExitTraceStartNs.store(std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count(), std::memory_order_release);
+        g_postExitTraceArmed.store(true, std::memory_order_release);
         g_cinematicFovApplied.store(false, std::memory_order_release);
         g_coordinator.store(CoordinatorState::CinematicExiting, std::memory_order_release);
+#ifdef POST_CINEMATIC_GAMEPLAY_REPLAY_ATOMIC_EXIT_HANDOFF_TEST
+        if (g_config.gameplayEnabled) ArmAtomicExitHandoff();
+#endif
         Log("Global cinematic EXIT: nativeTargetFov=", context.xmm0.f32[0],
+            " postExitTrace=armed sequence=", g_postExitTraceSequence.load(std::memory_order_acquire),
             ". Gameplay replay suppressed until native recovery.");
     }
 
@@ -1604,8 +2282,69 @@ namespace
         return true;
     }
 
+#ifdef POST_CINEMATIC_GAMEPLAY_REPLAY_ATOMIC_EXIT_HANDOFF_TEST
+    bool TryAtomicExitHandoff(SafetyHookContext& context)
+    {
+        if (!g_atomicExitHandoffPending.load(std::memory_order_acquire)) return false;
+        if (g_coordinator.load(std::memory_order_acquire) != CoordinatorState::CinematicExiting) {
+            ResetAtomicExitHandoff("coordinator-not-exiting");
+            return false;
+        }
+
+        {
+            std::lock_guard dialogueLock(g_dialogueMutex);
+            if (g_dialoguePhase != DialoguePhase::Inactive) {
+                ResetAtomicExitHandoff("dialogue-active");
+                return false;
+            }
+        }
+
+        const auto source = static_cast<std::uintptr_t>(context.rsi);
+        const float currentFov = context.xmm0.f32[0];
+        const float targetFov = g_exitTargetFov.load(std::memory_order_acquire);
+        const auto expectedSource = g_atomicExitHandoffSource.load(std::memory_order_acquire);
+        if (expectedSource != 0 && expectedSource != source) {
+            ResetAtomicExitHandoff("source-changed");
+            return false;
+        }
+        if (!std::isfinite(currentFov) || !std::isfinite(targetFov)) {
+            ResetAtomicExitHandoff("fov-unreadable");
+            return false;
+        }
+
+        const float previousFov = g_atomicExitHandoffPreviousFov.load(std::memory_order_acquire);
+        if (expectedSource == 0) {
+            g_atomicExitHandoffSource.store(source, std::memory_order_release);
+            g_atomicExitHandoffPreviousFov.store(currentFov, std::memory_order_release);
+            return false;
+        }
+        g_atomicExitHandoffPreviousFov.store(currentFov, std::memory_order_release);
+        if (!std::isfinite(previousFov) ||
+            currentFov >= previousFov - kDialogueTransformEpsilon ||
+            currentFov <= targetFov + kRecoveryEpsilon) return false;
+
+        float aspect = 0.0f;
+        std::uint8_t flags = 0;
+        if (!SafeRead(source + kAspectOffset, aspect) ||
+            !SafeRead(source + kFlagsOffset, flags)) {
+            ResetAtomicExitHandoff("camera-state-unreadable");
+            return false;
+        }
+
+        bool expectedPending = true;
+        if (!g_atomicExitHandoffPending.compare_exchange_strong(expectedPending, false,
+            std::memory_order_acq_rel)) return false;
+        ApplyGameplayAspectFixAtomic(source, "RecoveryStart", currentFov, aspect, flags);
+        return true;
+    }
+#endif
+
     void ReplayManualTransition(SafetyHookContext& context)
     {
+        ObservePostExitRawWriterEntry(context);
+#ifdef POST_CINEMATIC_GAMEPLAY_REPLAY_ATOMIC_EXIT_HANDOFF_TEST
+        if (TryAtomicExitHandoff(context)) return;
+#endif
         const auto state = g_coordinator.load(std::memory_order_acquire);
         if (state == CoordinatorState::CinematicActive) {
             return;
@@ -1626,9 +2365,36 @@ namespace
                 Log("Global coordinator: native recovery complete; delta=", delta,
                     " target=", targetFov, " current=", currentFov,
                     ". Same writer invocation returned without replay.");
+#ifdef POST_CINEMATIC_GAMEPLAY_REPLAY_DEFER_TEST
+#if defined(POST_CINEMATIC_GAMEPLAY_REPLAY_AT_RECOVERY_TEST) && \
+    !defined(POST_CINEMATIC_GAMEPLAY_REPLAY_ATOMIC_EXIT_HANDOFF_TEST)
+                if (g_config.gameplayEnabled) {
+                    const auto source = static_cast<std::uintptr_t>(context.rsi);
+                    std::uint8_t currentFlags{};
+                    float currentAspect = 0.0f;
+                    if (SafeRead(source + kAspectOffset, currentAspect) &&
+                        SafeRead(source + kFlagsOffset, currentFlags) &&
+                        WriteAspectAndFlags(source, kNativeAspect, 0x4)) {
+                        g_state.store(ReplayState::Complete, std::memory_order_release);
+                        g_lastAutoRestoreSource.store(source, std::memory_order_release);
+                        Log("AtomicReplayApplied: phase=RecoveryComplete source=0x", std::hex,
+                            source, std::dec, " fov=", currentFov, " aspect=", kNativeAspect,
+                            " flags=0x4 previousAspect=", currentAspect, " previousFlags=0x",
+                            std::hex, static_cast<unsigned>(currentFlags), std::dec, ".");
+                    } else {
+                        Log("AtomicReplayRefused: phase=RecoveryComplete final aspect/flags fields were not writable.");
+                    }
+                }
+#elif !defined(POST_CINEMATIC_GAMEPLAY_REPLAY_ATOMIC_EXIT_HANDOFF_TEST)
+                if (g_config.gameplayEnabled) ArmDeferredGameplayReplay(targetFov);
+#endif
+#endif
             }
             return;
         }
+#ifdef POST_CINEMATIC_GAMEPLAY_REPLAY_DEFER_TEST
+        if (TryDeferredGameplayReplay(context)) return;
+#endif
         if (!g_config.gameplayEnabled) {
             float aspect = 0.0f;
             const auto source = static_cast<std::uintptr_t>(context.rsi);
@@ -1759,6 +2525,18 @@ namespace
             const bool gameHashAvailable = ComputeSha256(executablePath, gameHash);
             Log("Runtime identity: modSha256=", modHashAvailable ? modHash : "unavailable",
                 " gameSha256=", gameHashAvailable ? gameHash : "unavailable", ".");
+#ifdef POST_EXIT_CAMERA_FOV_WRITE_OWNER_TRACE
+            if (!gameHashAvailable || !InstallPostExitFovWriteOwnerTrace(gameHash))
+                Log("Post-EXIT FOV physical-write trace: NOT_INSTALLED; production behavior unchanged.");
+#endif
+#ifdef POST_EXIT_FOV_PRODUCER_STORE_TRACE
+            if (!gameHashAvailable || !InstallPostExitProducerStoreTrace(gameHash))
+                Log("Post-EXIT FOV producer store trace: NOT_INSTALLED; production behavior unchanged.");
+#endif
+#ifdef POST_EXIT_FOV_STATE_CONSUMER_TRACE
+            if (!gameHashAvailable || !InstallPostExitFovConsumerTrace(gameHash))
+                Log("Post-EXIT FOV consumer trace: NOT_INSTALLED; production behavior unchanged.");
+#endif
             if (!LoadFeatureConfig(configPath))
                 Log("Configuration unavailable; using defaults with all fixes enabled.");
             g_runtimeCinematicPolicy.store(g_config.cinematicAspectPolicy, std::memory_order_release);
@@ -1804,6 +2582,12 @@ namespace
             } else {
                 Log("Gameplay aspect fix disabled by configuration.");
             }
+            Log("Initialization summary: GameplayHook=", g_hook ? "PASS" : "NOT_INSTALLED",
+                " CinematicAspect=", (g_cinematicAspectPatched || !CinematicAspectOverrideEnabled()) ? "PASS" : "BYPASSED",
+                " CinematicFOV=", (g_cinematicEnterHook && g_cinematicExitHook) ? "PASS" : "BYPASSED",
+                " Dialogue=", (g_dialogueBoundaryHook || g_config.dialogueZoomPolicy == DialogueZoomPolicy::Native)
+                    ? "PASS" : "BYPASSED",
+                " RuntimeTelemetry=", g_hook ? "PASS" : "NOT_INSTALLED", ".");
             if (g_config.hotkeysEnabled) {
                 const auto hotkeyThread = CreateThread(nullptr, 0,
                     [](void*) -> DWORD { HotkeyLoop(); return 0; }, nullptr, 0, nullptr);
@@ -1841,6 +2625,15 @@ namespace
 BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID)
 {
     if (reason == DLL_PROCESS_DETACH) {
+#ifdef POST_EXIT_CAMERA_FOV_WRITE_OWNER_TRACE
+        g_postExitWriteOwnerHook.reset();
+#endif
+#ifdef POST_EXIT_FOV_PRODUCER_STORE_TRACE
+        g_postExitProducerStoreHook.reset();
+#endif
+#ifdef POST_EXIT_FOV_STATE_CONSUMER_TRACE
+        g_postExitConsumerHook.reset();
+#endif
         g_dialogueBoundaryHook.reset();
         RestoreCinematicAspect();
         return TRUE;

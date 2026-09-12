@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <sstream>
 
 namespace
 {
@@ -116,6 +117,47 @@ namespace
         return true;
     }
 
+    struct StackProbe
+    {
+        std::uintptr_t contextRsp{};
+        std::uintptr_t trampolineRsp{};
+        std::uintptr_t contextRspTop{};
+        std::uintptr_t trampolineRspTop{};
+    };
+
+    StackProbe ProbeStack(const SafetyHookContext& context)
+    {
+        StackProbe probe{
+            static_cast<std::uintptr_t>(context.rsp),
+            static_cast<std::uintptr_t>(context.trampoline_rsp),
+            0,
+            0,
+        };
+        SafeRead(probe.contextRsp, probe.contextRspTop);
+        SafeRead(probe.trampolineRsp, probe.trampolineRspTop);
+        return probe;
+    }
+
+    std::uint64_t ExecutableRva(std::uintptr_t address)
+    {
+        const auto base = reinterpret_cast<std::uintptr_t>(g_executable);
+        return address >= base ? static_cast<std::uint64_t>(address - base) : 0;
+    }
+
+    std::string CaptureNativeStack()
+    {
+        void* frames[12]{};
+        const auto count = CaptureStackBackTrace(0, static_cast<DWORD>(std::size(frames)), frames, nullptr);
+        std::ostringstream stream;
+        stream << "stack=";
+        for (USHORT i = 0; i < count; ++i) {
+            const auto address = reinterpret_cast<std::uintptr_t>(frames[i]);
+            if (i != 0) stream << ",";
+            stream << "0x" << std::hex << address << "/rva=0x" << ExecutableRva(address);
+        }
+        return stream.str();
+    }
+
     bool LogState(const char* phase, std::uint64_t sequence, SafetyHookContext& context, bool prePhase)
     {
         float inputFov = 0.0f;
@@ -136,6 +178,7 @@ namespace
 
         const auto source = static_cast<std::uintptr_t>(context.rsi);
         const auto output = static_cast<std::uintptr_t>(context.rbx);
+        const auto stack = ProbeStack(context);
         const bool complete =
             SafeRead(source + 0x230, inputFov) && SafeRead(source + 0x234, secondaryFov) &&
             SafeRead(source + 0x248, state248) && SafeRead(source + 0x254, aspect) &&
@@ -169,10 +212,13 @@ namespace
 
         if (g_logger) {
             g_logger->info(
-                "TRACE seq={} phase={} source=0x{:X} output=0x{:X} inputFov={} secondaryFov={} state248={} aspect={} flags=0x{:02X} 25C={} 260=0x{:02X} 261=0x{:02X} 262=0x{:02X} 263=0x{:02X} outputFov={} outputAspect={} outputField40=0x{:X} outputField58=0x{:X} outputField68=0x{:X} renderResolution=unresolved",
-                sequence, phase, source, output, inputFov, secondaryFov, state248, aspect, flags, scale25c,
+                "TRACE seq={} phase={} source=0x{:X} output=0x{:X} contextRsp=0x{:X} trampolineRsp=0x{:X} contextRspTop=0x{:X} trampolineRspTop=0x{:X} contextRspRva=0x{:X} trampolineRspTopRva=0x{:X} inputFov={} secondaryFov={} state248={} aspect={} flags=0x{:02X} 25C={} 260=0x{:02X} 261=0x{:02X} 262=0x{:02X} 263=0x{:02X} outputFov={} outputAspect={} outputField40=0x{:X} outputField58=0x{:X} outputField68=0x{:X} renderResolution=unresolved",
+                sequence, phase, source, output, stack.contextRsp, stack.trampolineRsp, stack.contextRspTop,
+                stack.trampolineRspTop, ExecutableRva(stack.contextRsp), ExecutableRva(stack.trampolineRspTop), inputFov,
+                secondaryFov, state248, aspect, flags, scale25c,
                 mode260, mode261, mode262, mode263, outputFov, outputAspect,
                 outputField40, outputField58, outputField68);
+            g_logger->info("TRACE seq={} phase={} {}", sequence, phase, CaptureNativeStack());
         }
         return true;
     }

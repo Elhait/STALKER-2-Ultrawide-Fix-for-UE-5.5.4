@@ -352,6 +352,10 @@ exact commit scope.
 - Create or update the GitHub Release using `GITHUB_RELEASE_BODY.md`.
 - Upload the final verified archive.
 - Verify version, title, target branch, prerelease/draft state and asset.
+- Recorded execution for v0.5.0: tag `v0.5.0`, target `main`, title
+  `v0.5.0 — Dynamic Ultrawide Gameplay, Cinematics, Dialogue FOV & Custom
+  Framing`, Latest release selected, and archive
+  `STALKER2CameraTweaks-UE5.5.4-v0.5.0.zip` uploaded.
 - If the UI changed, adapt the playbook when mapping is unambiguous; ask only
   for a genuinely new or ambiguous decision.
 
@@ -361,6 +365,18 @@ exact commit scope.
 - Upload the same verified archive.
 - Verify file display name, category, compatibility selections, changelog and
   main-file replacement/coexistence choice.
+- Recorded execution for v0.5.0: updated the existing `0.4.0` Main file,
+  archived the previous file, kept the new file as primary and enabled mod
+  manager downloads and the requirements popup.
+- Recorded display name: `STALKER 2 Ultrawide and Camera Tweaks by Elhait`.
+- Recorded file description: `Unified gameplay, cinematic and dialogue FOV
+  fixes for Steam 2.0.4 / UE 5.5.4. Adds Adaptive and Reduced dialogue zoom,
+  custom cinematic framing, dynamic aspect correction and guarded signature
+  resolution.`
+- Recorded changelog: `Added FOV-aware dialogue zoom: Native, Adaptive,
+  Reduced and Disabled. Smooth EXIT recovery for dialogue lifecycle.
+  Configurable F9/F10 next-lifecycle hotkeys. Renamed production identity to
+  STALKER2CameraTweaks.`
 - Do not infer unknown field values from assumptions.
 
 ### B4 — Post-publish verification
@@ -377,30 +393,35 @@ exact commit scope.
 
 Record values actually used and reuse them unless intentionally changed:
 
-- Tag format: `<established convention>`
-- Release title: `<established convention>`
-- Target branch: `<branch>`
-- Latest release: `<yes/no>`
-- Prerelease: `<yes/no>`
-- Draft before publication: `<yes/no>`
-- Uploaded archive: `<archive filename>`
+- Tag format: `v<major>.<minor>.<patch>`
+- Release title: `v<version> — Dynamic Ultrawide Gameplay, Cinematics, Dialogue FOV & Custom Framing`
+- Target branch: `main`
+- Latest release: `yes`
+- Prerelease: `no`
+- Draft before publication: `no`
+- Uploaded archive: `STALKER2CameraTweaks-UE5.5.4-v0.5.0.zip`
 - Release body: `GITHUB_RELEASE_BODY.md`
-- Naming notes: `<notes>`
+- Naming notes: use feature-oriented title with version first; keep the full
+  product name in the release body.
 
 ## Nexus Mods field reference
 
 Record values actually used and reuse them unless intentionally changed:
 
-- Version format: `<established convention>`
-- File display name: `<established convention>`
-- File category: `<actual category>`
-- Short description: `<actual source>`
+- Version format: `<major>.<minor>.<patch>`
+- File display name: `STALKER 2 Ultrawide and Camera Tweaks by Elhait`
+- File category: `Main`
+- Short description: `Unified gameplay, cinematic and dialogue FOV fixes for Steam 2.0.4 / UE 5.5.4. Adds Adaptive and Reduced dialogue zoom, custom cinematic framing, dynamic aspect correction and guarded signature resolution.`
 - Long description: `NEXUS_DESCRIPTION.md`
-- Changelog: `<actual source>`
-- Replace/coexist with previous main file: `<actual choice>`
-- Compatibility/game-version selections: `<actual selections>`
-- Persistent category/options: `<actual settings>`
-- Uploaded archive: `<archive filename>`
+- Changelog: four-line v0.5.0 entry covering dialogue modes, smooth EXIT
+  recovery, F9/F10 next-lifecycle hotkeys and renamed identity.
+- Replace/coexist with previous main file: update existing `0.4.0` and archive
+  the previous file.
+- Compatibility/game-version selections: preserve the existing mod-page
+  selections; runtime claim is Steam 2.0.4.
+- Persistent category/options: primary file enabled, mod-manager download
+  enabled, requirements popup enabled.
+- Uploaded archive: `STALKER2CameraTweaks-UE5.5.4-v0.5.0.zip`
 
 After the first actual publication, replace these placeholders with the values
 used. They become canonical defaults unless intentionally changed.

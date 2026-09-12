@@ -1,11 +1,11 @@
 STALKER 2 Ultrawide and Camera Tweaks for UE 5.5.4
-Version 0.5.0
+Version 0.6.0
 
 [b]ABOUT[/b]
 
 A unified ultrawide, cinematic and camera/FOV fix for S.T.A.L.K.E.R. 2: Heart of Chornobyl on Steam.
 
-The mod corrects gameplay camera behavior on 21:9 and 32:9 displays, fixes cinematic aspect ratio and Hor+ FOV, adds custom cinematic framing, and provides FOV-aware dialogue zoom controls.
+The mod corrects gameplay camera behavior on 21:9 and 32:9 displays, fixes cinematic aspect ratio and Hor+ FOV, adds custom cinematic framing, and provides FOV-aware dialogue zoom controls. Version 0.6.0 replaces the old staged gameplay correction with an atomic camera-state handoff and applies the gameplay framing correction once at the start of post-cinematic recovery, removing the mod's additional post-cinematic flick.
 
 [b]COMPATIBILITY WITH CAMERA / FOV MODS[/b]
 
@@ -16,7 +16,8 @@ Bug reports must be reproduced with STALKER2CameraTweaks as the only installed c
 [b]FEATURES[/b]
 
 [list]
-[*]Fixes gameplay aspect transitions on 21:9 and 32:9.
+[*]Fixes gameplay aspect transitions on 21:9 and 32:9 with an atomic camera-state apply.
+[*]Applies a single atomic gameplay handoff at the start of post-cinematic native FOV recovery.
 [*]Automatically re-arms after gameplay camera rebuilds, including death and load.
 [*]Preserves the selected gameplay FOV.
 [*]Corrects cinematic aspect ratio using the game's runtime camera state.
@@ -44,7 +45,7 @@ For example, forcing 32:9 on a 16:9 display produces a wider cinematic presentat
 
 [b]DIALOGUE ZOOM[/b]
 
-Version 0.5.0 adds dialogue zoom that adapts to the actual gameplay FOV:
+Version 0.6.0 updates the unified ASI for Steam 2.0.5 while retaining dialogue zoom that adapts to the actual gameplay FOV:
 
 [list]
 [*]Native - keeps the game's original dialogue zoom, currently targeting 70 degrees.
@@ -86,7 +87,8 @@ Supported hotkey bindings: F1-F12, 0-9 and A-Z.
 [list]
 [*]Steam version of S.T.A.L.K.E.R. 2: Heart of Chornobyl.
 [*][url=https://github.com/ThirteenAG/Ultimate-ASI-Loader]Ultimate ASI Loader (x64)[/url], with dsound.dll placed in Stalker2\Binaries\Win64.
-[*]Tested game build: Steam 2.0.4.
+[*]Production implementation runtime-tested on Steam 2.0.5.
+[*]Static resolver validation: Steam 2.0.2, 2.0.3, 2.0.4 and 2.0.5.
 [*]Unreal Engine target: 5.5.4.
 [/list]
 
@@ -107,16 +109,15 @@ The plugin creates STALKER2CameraTweaks.log in the game folder. Include this log
 [*]21:9 and 32:9 gameplay, including startup, aspect switching and death/load camera rebuilds.
 [*]Auto, Native, forced 16:9, 21:9 and 32:9 cinematic framing.
 [*]Runtime aspect changes after changing resolution during the same session in Auto mode.
-[*]Dialogue zoom Native, Adaptive, Reduced and Disabled on Steam 2.0.4.
+[*]Dialogue zoom Native, Adaptive, Reduced and Disabled on Steam 2.0.5.
 [*]Sequential dialogue cycles and cinematic-to-dialogue state isolation.
 [*]Configurable runtime hotkeys and INI template synchronization behavior.
-[*]Dialogue resolver statically validated on Steam 2.0.2, 2.0.3 and 2.0.4. This is not runtime compatibility proof for the older builds.
+[*]Resolver portability statically validated across Steam 2.0.2–2.0.5. Runtime validation of the current production implementation is limited to 2.0.5.
 [/list]
 
 [b]KNOWN ISSUES[/b]
 
 [list]
-[*]A brief camera or projection shift may still be visible immediately after some cinematics while the game hands control back to gameplay.
 [*]Weapon/viewmodel FOV can be incorrect after a cinematic, load or gameplay-camera rebuild. Aiming down sights or opening a menu refreshes the game's viewmodel state. This is a separate game-side issue and is not fixed by this release.
 [*]Do not combine this release with the old gameplay ASI or experimental cinematic ASI files.
 [/list]
@@ -127,7 +128,7 @@ Gameplay, cinematic and dialogue code locations are resolved dynamically using g
 
 Game updates that only relocate validated code may continue to work without a mod update, while structural changes may require new signatures. If validation fails or becomes ambiguous, the affected hook fails safely rather than installing against an unknown code path.
 
-Runtime validation for this release was performed on Steam build 2.0.4. Static resolver validation across Steam 2.0.2-2.0.4 does not establish runtime support for the older builds.
+The production implementation was runtime-tested on Steam build 2.0.5. Static resolver validation across Steam 2.0.2–2.0.5 confirms resolver portability but does not establish runtime support for the older builds. The game's native post-cinematic FOV recovery remains untouched.
 
 [b]DEFENDER NOTICE[/b]
 
