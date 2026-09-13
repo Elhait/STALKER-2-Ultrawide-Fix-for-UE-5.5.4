@@ -1,6 +1,6 @@
 # Cinematic Auto Aspect and Subtitle Alignment — Task Plan
 
-Status: `BATCH 1 PASS / BATCH 2 PASS / HOTFIX PACKAGED — SUBTITLE TRACK OPEN`.
+Status: `BATCH 1 PASS / BATCH 2 PASS / HOTFIX PACKAGED — SUBTITLE TRACK DEFERRED`.
 
 ## Objective
 
@@ -118,7 +118,7 @@ Artifact: `release-assets/STALKER2CameraTweaks-UE5.5.4-v0.5.1.zip`.
 
 ### Batch 3 — Subtitle alignment ownership
 
-Status: `READY AFTER / independent track`.
+Status: `COMPLETE / DEFERRED — no production owner established`.
 
 - Establish whether subtitle displacement tracks the cinematic viewport/frame,
   a UI safe-zone, or an independent subtitle canvas anchor.
@@ -126,15 +126,27 @@ Status: `READY AFTER / independent track`.
   observation of subtitle layout inputs.
 - Stop if evidence requires a broad Slate/UI renderer scan.
 
+Result: Steam 2.0.5 vanilla reproduction was confirmed at 2560x1440 and
+5120x1440. UE4SS identified `SubtitleView`, and root translation moved the
+complete subtitle composition without moving dialogue choices. Child alignment
+and fixed offsets were rejected. Lua did not expose usable post-layout
+geometry. The bounded C++/Slate Batch 1 inspection found no safe existing
+geometry interface or ABI anchor, so no probe or production change was made.
+
 ### Batch 4 — Decision
 
-Status: `BLOCKED pending Batch 1/2/3`.
+Status: `COMPLETE — Auto track passed; subtitle track deferred/rejected`.
 
 - Promote only a reproducible Auto source fix and/or independently proven
   subtitle owner.
 - Keep the two fixes separate unless a shared lifecycle/UI owner is proven.
 - If ownership remains unresolved, record a bounded negative/deferred result and
   leave current production behavior unchanged.
+
+Decision: the Auto aspect track remains passed and packaged as the hotfix. The
+subtitle position fix is deferred/rejected until reliable post-layout
+`FGeometry` and viewport geometry can be obtained through an independently
+established safe interface. Production behavior remains unchanged.
 
 ## Risks and rollback / safe failure
 

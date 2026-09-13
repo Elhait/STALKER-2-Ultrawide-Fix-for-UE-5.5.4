@@ -266,6 +266,133 @@ changed.
   downstream projection owner were not identified; no compatibility or
   cinematic behavior claim follows from this control alone.
 
+### Subtitle horizontal centering — deferred / rejected for production
+
+- The subtitle displacement reproduces on Steam 2.0.5 without
+  `STALKER2CameraTweaks`, including at `2560x1440` and `5120x1440`; it is
+  therefore not attributed to the camera/aspect mod.
+- UE4SS located the live `SubtitleView` widget. Its
+  `SetRenderTranslation()` moves the complete subtitle composition — speaker
+  name, punctuation, dialogue text and background — while leaving the
+  dialogue-choice UI unaffected.
+- Child-level `HorizontalAlignment`, `VerticalAlignment`, `Justification`,
+  width override and fixed per-child offsets did not correct final placement.
+- Fixed `SubtitleView` offsets and resolution/aspect-specific offset tables are
+  rejected because rendered composition width changes with speaker name,
+  dialogue length, wrapping and content.
+- UE4SS Lua did not expose reliable post-layout `FGeometry` or viewport
+  geometry. A bounded C++/Slate Batch 1 inspection found no Unreal/Slate
+  headers, UObject/Slate bridge, viewport geometry interface or established
+  safe ABI anchor in the current ASI project; no research probe was built.
+- Production changes: none. No subtitle hook, UI write, Slate integration or
+  heuristic correction is part of the release.
+- Status: `SUBTITLE GEOMETRY RESEARCH — DEFERRED`; the fix remains rejected
+  until an independent safe post-layout geometry interface is established.
+
+#### UE4SS runtime evidence
+
+The following observations were made in the Steam 2.0.5 game session with
+UE4SS and are retained as research evidence only. All property changes were
+temporary runtime experiments and were cleared by restarting or reloading the
+game; none were added to the production ASI.
+
+- The actor dump `1789298599-ue4ss_actor_data.csv` did not provide the live UMG
+  instance. UE4SS Lua found exactly one live object:
+
+  ```text
+  SubtitleView_C /Engine/Transient.Stalker2GameEngine_2147482609:
+  BP_SML_C_2147482553.SubtitleView_C_2147461272
+  ```
+
+- The live `USubtitleView` fields identified from the UE4SS headers were:
+  `SpeakerDialogText`, `TwoPoint`, `NameBox`, `SubtitileBorder`,
+  `SubtitileContainer` and `TextDialog`.
+
+- The initial widget relationships were:
+
+  ```text
+  Overlay_1
+  ├─ SubtitileContainer → SubtitileBorder → TextDialog
+  ├─ NameBox → SpeakerDialogText + TwoPoint
+  └─ separate dialogue-choice UI elements
+  ```
+
+- The live text values were confirmed independently:
+
+  ```text
+  TextDialog         = "Здоров!"
+  SpeakerDialogText  = "Вітя Бусел"
+  TwoPoint           = ":"
+  ```
+
+- Initial observed layout values included:
+
+  ```text
+  TextDialog.CommonTextObj.Justification = 0
+  SpeakerDialogText.CommonTextObj.Justification = 2
+  TextDialog.GetDesiredSize().X ≈ 85.64999
+  SubtitileContainer.WidthOverride = 800
+  SubtitileContainer.HeightOverride = 100
+  SubtitileContainer slot padding = L0 T0 R0 B50
+  NameBox slot = H3 / V1
+  ```
+
+  The observed `H3/V1` on `NameBox` corresponds to right/top in the tested
+  Overlay layout; changing it to center did not change the final rendered
+  position.
+
+- Temporary child-level tests were performed and visually rejected:
+
+  ```text
+  TextDialog.CommonTextObj:SetJustification(2)
+  SubtitileContainer.Slot:SetHorizontalAlignment(2)
+  SubtitileBorder:SetHorizontalAlignment(2)
+  TextDialog.Slot:SetHorizontalAlignment(2)
+  SubtitileContainer.WidthOverride = 0
+  ```
+
+  The values changed or the calls returned successfully, but the rendered
+  subtitle position did not follow them.
+
+- `RenderTransform` fields reported zero translation, unit scale and zero
+  angle. Direct field edits did not affect rendering. The callable
+  `SetRenderTranslation()` did affect rendering:
+
+  ```text
+  TextDialog +500                  → moved only the dialogue text
+  SpeakerDialogText +500           → moved the speaker text separately
+  NameBox +500                     → moved the name and colon together
+  SubtitleView +500                → moved the complete subtitle composition
+                                      while dialogue-choice UI stayed in place
+  ```
+
+  The `SubtitleView` root test was the only confirmed whole-block control
+  point. Fixed trial values such as `+500`, `+650` and a compensating `-150`
+  on a child were diagnostic only and are explicitly rejected as a solution.
+
+- Hiding `TextDialog` immediately removed `"Здоров!"`, confirming that it was
+  the active rendered text. Hiding `SubtitileBorder` removed both the text and
+  its background, confirming their parent relationship.
+
+- `FindAllOf("FadeoutScreen")` returned no live instances during the tested
+  dialogue. The subtitle was therefore not attributed to a separate active
+  `UFadeoutScreen` layer.
+
+- `GetCachedGeometry()` returned a wrapper, but the UE4SS Lua binding did not
+  expose usable numeric absolute position/size or local-size methods. A broad
+  parent/child traversal was attempted once and caused a game crash; it was
+  abandoned and is not part of the accepted evidence method.
+
+- Final UE4SS conclusion:
+
+  ```text
+  SubtitleView whole-block translation: CONFIRMED
+  Child alignment/justification control: NOT EFFECTIVE
+  Post-layout FGeometry via Lua: NOT AVAILABLE
+  Fixed offset: REJECTED
+  Production UI write: NONE
+  ```
+
 ## Testing limits
 
 - Build success proves compilation and linking only.
@@ -283,6 +410,9 @@ changed.
   sequence.
 - The game's native post-cinematic FOV recovery remains a visible native
   transition in some scenarios and is intentionally untouched.
+- Subtitle horizontal positioning is a separate vanilla UI issue. It was
+  reproduced without the mod, and no production compatibility or fix claim is
+  made for it.
 
 ## Release checklist
 
