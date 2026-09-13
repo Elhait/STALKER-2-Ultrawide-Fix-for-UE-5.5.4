@@ -124,6 +124,32 @@ physical display aspect ratio. These examples show `Auto` at 16:9, and forced
 | Forced `32:9` at 5120x1440 | ![Forced 32:9 cinematic framing](screens/Cutscene%2032-9%20in%205120x1440jpg.jpg) |
 | Forced `32:9` at 2560x1440 | ![Forced 32:9 cinematic letterbox](screens/Cutscene%2032-9%20in%202560x1440.jpg) |
 
+## Dialogue zoom comparisons
+
+Dialogue zoom is calculated relative to the current gameplay FOV. The
+comparison images below show the available production policies on a
+`5120x1440` display.
+
+| Configuration | Example |
+| --- | --- |
+| `Adaptive` / `Native` at gameplay FOV 90 | ![Dialogue Adaptive or Native zoom](screens/Dialog%20Default%20zoom%20or%20Adaptive%20for%2090%20game%20fov%20in%205120x1440.jpg) |
+| `Reduced` at gameplay FOV 90 | ![Dialogue Reduced zoom](screens/Dialog%20Reduced%20zoom%20in%205120x1440.jpg) |
+| `Disabled` | ![Dialogue Disabled zoom](screens/Dialog%20Disabled%20zoom%20in%205120x1440.jpg) |
+
+`Native` preserves the game's original dialogue zoom, `Adaptive` preserves
+its optical zoom strength relative to gameplay, `Reduced` applies half of the
+Adaptive strength, and `Disabled` keeps the gameplay FOV during dialogue.
+
+## Animated demonstrations
+
+These recordings show the validated runtime behavior of the unified ASI:
+
+| Area | Demonstration |
+| --- | --- |
+| Gameplay aspect correction | ![Gameplay aspect correction](screens/Gameplay.gif) |
+| Cinematic framing and FOV | ![Cinematic framing and FOV](screens/Cutscene.gif) |
+| Dialogue zoom policies | ![Dialogue zoom policies](screens/Dialog.gif) |
+
 ## License and credits
 
 Copyright for this project is held by Elhait and released under MIT. Some helper and ASI-scaffolding portions are derived from Lyall's MIT-licensed STALKER2Tweak; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
